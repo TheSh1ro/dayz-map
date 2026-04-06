@@ -1,0 +1,1194 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>DayZ Map — Chernarus+</title>
+    <link
+      rel="stylesheet"
+      href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+    />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Barlow+Condensed:wght@400;600;700;900&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      :root {
+        --bg: #080a08;
+        --panel: #0b0f0b;
+        --panel2: #0f140f;
+        --border: #182018;
+        --border2: #243024;
+        --green: #3dd65a;
+        --green-lo: #162a1e;
+        --amber: #e8b84b;
+        --red: #e05252;
+        --text: #8db88d;
+        --text-dim: #3a503a;
+        --text-hi: #cde8cd;
+      }
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+      html,
+      body {
+        height: 100%;
+        overflow: hidden;
+      }
+      body {
+        background: var(--bg);
+        color: var(--text);
+        font-family: "Share Tech Mono", monospace;
+        display: flex;
+        flex-direction: column;
+      }
+      header {
+        height: 44px;
+        background: var(--panel);
+        border-bottom: 1px solid var(--border2);
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        padding: 0 18px;
+        flex-shrink: 0;
+        z-index: 999;
+      }
+      .logo {
+        font-family: "Barlow Condensed", sans-serif;
+        font-weight: 900;
+        font-size: 1.3rem;
+        letter-spacing: 0.16em;
+        color: var(--green);
+        text-transform: uppercase;
+      }
+      .logo em {
+        color: var(--amber);
+        font-style: normal;
+      }
+      .vline {
+        width: 1px;
+        height: 18px;
+        background: var(--border2);
+      }
+      .mapname {
+        font-size: 0.6rem;
+        letter-spacing: 0.2em;
+        color: var(--text-dim);
+        text-transform: uppercase;
+      }
+      .pill {
+        display: flex;
+        align-items: center;
+        gap: 5px;
+        background: rgba(61, 214, 90, 0.06);
+        border: 1px solid var(--green-lo);
+        padding: 2px 8px;
+        border-radius: 2px;
+        font-size: 0.55rem;
+        letter-spacing: 0.12em;
+        color: var(--green);
+      }
+      .dot {
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+        background: var(--green);
+        animation: blink 2s ease-in-out infinite;
+      }
+      @keyframes blink {
+        0%,
+        100% {
+          opacity: 1;
+        }
+        50% {
+          opacity: 0.15;
+        }
+      }
+      .hstat {
+        font-size: 0.58rem;
+        color: var(--text-dim);
+      }
+      .hstat b {
+        color: var(--text-hi);
+      }
+      .hright {
+        margin-left: auto;
+        display: flex;
+        align-items: center;
+        gap: 14px;
+      }
+      .body {
+        display: flex;
+        flex: 1;
+        overflow: hidden;
+      }
+      .sidebar {
+        width: 240px;
+        background: var(--panel);
+        border-right: 1px solid var(--border2);
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+        flex-shrink: 0;
+      }
+      .sb-top {
+        flex-shrink: 0;
+        border-bottom: 1px solid var(--border2);
+        padding: 12px 14px;
+      }
+      .sb-scroll {
+        flex: 1;
+        overflow-y: auto;
+        overflow-x: hidden;
+      }
+      .sb-scroll::-webkit-scrollbar {
+        width: 3px;
+      }
+      .sb-scroll::-webkit-scrollbar-thumb {
+        background: var(--border2);
+      }
+      .coords-box {
+        background: #050705;
+        border: 1px solid var(--green-lo);
+        padding: 9px 11px;
+        border-radius: 2px;
+      }
+      .crow {
+        display: flex;
+        justify-content: space-between;
+        align-items: baseline;
+      }
+      .clbl {
+        font-size: 0.56rem;
+        color: var(--text-dim);
+      }
+      .cval {
+        font-size: 1.1rem;
+        color: var(--green);
+        letter-spacing: 0.04em;
+      }
+      .csep {
+        height: 1px;
+        background: var(--border);
+        margin: 7px 0;
+      }
+      .chint {
+        font-size: 0.52rem;
+        color: var(--text-dim);
+        margin-top: 5px;
+      }
+      .layer-row {
+        display: flex;
+        gap: 6px;
+        margin-top: 10px;
+      }
+      .lbtn {
+        flex: 1;
+        padding: 5px 0;
+        font-family: "Share Tech Mono", monospace;
+        font-size: 0.62rem;
+        cursor: pointer;
+        border: 1px solid var(--border2);
+        border-radius: 2px;
+        background: transparent;
+        color: var(--text-dim);
+        transition: 0.15s;
+        letter-spacing: 0.08em;
+      }
+      .lbtn:hover {
+        border-color: var(--green-lo);
+        color: var(--text);
+      }
+      .lbtn.on {
+        border-color: var(--green);
+        color: var(--green);
+        background: rgba(61, 214, 90, 0.06);
+      }
+      .sec-hd {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 8px 14px 6px;
+        user-select: none;
+        border-bottom: 1px solid var(--border);
+      }
+      .sec-hd:hover {
+        background: rgba(255, 255, 255, 0.015);
+      }
+      .sec-title {
+        font-size: 0.58rem;
+        letter-spacing: 0.18em;
+        color: var(--text-dim);
+        text-transform: uppercase;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        cursor: pointer;
+      }
+      .sec-title::before {
+        content: "";
+        display: block;
+        width: 3px;
+        height: 3px;
+        background: var(--green-lo);
+      }
+      .sec-right {
+        display: flex;
+        align-items: center;
+        gap: 7px;
+      }
+      .sec-arrow {
+        font-size: 0.45rem;
+        color: var(--text-dim);
+        transition: transform 0.2s;
+        cursor: pointer;
+      }
+      .sec-arrow.open {
+        transform: rotate(90deg);
+      }
+      .sec-body {
+        padding: 5px 14px 8px;
+      }
+      .fitem {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 4px 5px;
+        cursor: pointer;
+        border-radius: 2px;
+        transition: 0.1s;
+      }
+      .fitem:hover {
+        background: rgba(255, 255, 255, 0.03);
+      }
+      .fitem-icon {
+        width: 20px;
+        height: 20px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 0.62rem;
+        flex-shrink: 0;
+        color: #fff;
+        line-height: 1;
+      }
+      .fitem-name {
+        font-size: 0.68rem;
+        color: var(--text-dim);
+        flex: 1;
+      }
+      .fitem:hover .fitem-name {
+        color: var(--text);
+      }
+      .cbx {
+        width: 14px;
+        height: 14px;
+        border: 1px solid var(--border2);
+        border-radius: 1px;
+        background: var(--bg);
+        flex-shrink: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        transition: 0.12s;
+      }
+      .cbx.on {
+        background: var(--green);
+        border-color: var(--green);
+      }
+      .cbx.on::after {
+        content: "✓";
+        font-size: 0.55rem;
+        color: #000;
+        font-weight: 900;
+      }
+      .cbx-big {
+        width: 15px;
+        height: 15px;
+        border: 1px solid var(--border2);
+        border-radius: 1px;
+        background: var(--bg);
+        flex-shrink: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        transition: 0.12s;
+      }
+      .cbx-big.on {
+        background: var(--green);
+        border-color: var(--green);
+      }
+      .cbx-big.on::after {
+        content: "✓";
+        font-size: 0.6rem;
+        color: #000;
+        font-weight: 900;
+      }
+      .sb-status {
+        padding: 10px 14px;
+        font-size: 0.56rem;
+        color: var(--amber);
+        line-height: 1.6;
+      }
+      .sb-status.err {
+        color: var(--red);
+      }
+      #map {
+        flex: 1;
+        background: #060806;
+        cursor: crosshair !important;
+      }
+      footer {
+        height: 28px;
+        background: var(--panel);
+        border-top: 1px solid var(--border2);
+        display: flex;
+        align-items: center;
+        padding: 0 16px;
+        gap: 14px;
+        flex-shrink: 0;
+        font-size: 0.56rem;
+        color: var(--text-dim);
+      }
+      footer b {
+        color: var(--text);
+      }
+      .fright {
+        margin-left: auto;
+        font-size: 0.52rem;
+      }
+      .leaflet-container {
+        background: #060806 !important;
+        cursor: crosshair !important;
+      }
+      .leaflet-control-zoom {
+        border: 1px solid var(--border2) !important;
+        box-shadow: none !important;
+        border-radius: 2px !important;
+      }
+      .leaflet-control-zoom a {
+        background: var(--panel) !important;
+        color: var(--green) !important;
+        border-bottom: 1px solid var(--border2) !important;
+        width: 26px !important;
+        height: 26px !important;
+        line-height: 26px !important;
+        font-size: 1.1rem !important;
+      }
+      .leaflet-control-zoom a:hover {
+        background: var(--panel2) !important;
+      }
+      .leaflet-control-attribution {
+        background: rgba(5, 7, 5, 0.88) !important;
+        color: var(--text-dim) !important;
+        font-family: "Share Tech Mono", monospace !important;
+        font-size: 0.5rem !important;
+      }
+      .leaflet-popup-content-wrapper {
+        background: var(--panel) !important;
+        border: 1px solid var(--border2) !important;
+        border-radius: 2px !important;
+        color: var(--text) !important;
+        box-shadow: 0 6px 24px rgba(0, 0, 0, 0.7) !important;
+      }
+      .leaflet-popup-tip-container {
+        display: none;
+      }
+      .leaflet-popup-close-button {
+        color: var(--text-dim) !important;
+        font-size: 0.9rem !important;
+        top: 5px !important;
+        right: 7px !important;
+      }
+      .leaflet-popup-content {
+        font-family: "Share Tech Mono", monospace !important;
+        font-size: 0.7rem !important;
+        margin: 10px 14px !important;
+        min-width: 150px;
+      }
+      .pu-name {
+        color: var(--green);
+        font-size: 0.9rem;
+        margin-bottom: 3px;
+      }
+      .pu-type {
+        font-size: 0.55rem;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        color: var(--text-dim);
+        margin-bottom: 6px;
+      }
+      .pu-coords {
+        font-size: 0.65rem;
+        border-top: 1px solid var(--border);
+        padding-top: 5px;
+        margin-top: 2px;
+      }
+      /* ── Calibration panel ── */
+      .calib-wrap {
+        border-top: 1px solid var(--border2);
+        padding: 10px 14px 12px;
+      }
+      .calib-title {
+        font-size: 0.56rem;
+        letter-spacing: 0.18em;
+        text-transform: uppercase;
+        color: var(--amber);
+        margin-bottom: 8px;
+        display: flex;
+        align-items: center;
+        gap: 5px;
+      }
+      .calib-title::before {
+        content: "⊕";
+        font-size: 0.75rem;
+      }
+      .calib-pt {
+        background: #050705;
+        border: 1px solid var(--border2);
+        border-radius: 2px;
+        padding: 8px 9px;
+        margin-bottom: 7px;
+      }
+      .calib-pt-hd {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 6px;
+      }
+      .calib-pt-lbl {
+        font-size: 0.56rem;
+        letter-spacing: 0.1em;
+        color: var(--text-dim);
+      }
+      .cpick-btn {
+        font-family: "Share Tech Mono", monospace;
+        font-size: 0.52rem;
+        padding: 2px 7px;
+        border: 1px solid var(--border2);
+        border-radius: 1px;
+        background: transparent;
+        color: var(--text-dim);
+        cursor: pointer;
+        transition: 0.12s;
+      }
+      .cpick-btn:hover {
+        border-color: var(--amber);
+        color: var(--amber);
+      }
+      .cpick-btn.picking {
+        border-color: var(--amber);
+        color: var(--amber);
+        animation: blink 1s ease-in-out infinite;
+      }
+      .calib-json {
+        font-size: 0.52rem;
+        color: var(--text-dim);
+        margin-bottom: 5px;
+      }
+      .calib-json span {
+        color: var(--green-lo);
+      }
+      .calib-row {
+        display: flex;
+        gap: 5px;
+        align-items: center;
+      }
+      .calib-row label {
+        font-size: 0.5rem;
+        color: var(--text-dim);
+        width: 18px;
+      }
+      .calib-inp {
+        flex: 1;
+        font-family: "Share Tech Mono", monospace;
+        font-size: 0.65rem;
+        background: #030503;
+        border: 1px solid var(--border2);
+        color: var(--green);
+        padding: 3px 5px;
+        border-radius: 1px;
+        width: 100%;
+      }
+      .calib-inp:focus {
+        outline: none;
+        border-color: var(--green-lo);
+      }
+      .calib-mode-row {
+        display: flex;
+        gap: 6px;
+        align-items: center;
+        margin: 6px 0;
+      }
+      .calib-mode-row label {
+        font-size: 0.5rem;
+        color: var(--text-dim);
+      }
+      .calib-sel {
+        font-family: "Share Tech Mono", monospace;
+        font-size: 0.55rem;
+        background: #030503;
+        border: 1px solid var(--border2);
+        color: var(--text);
+        padding: 2px 4px;
+        border-radius: 1px;
+        flex: 1;
+      }
+      .calib-apply {
+        width: 100%;
+        padding: 5px 0;
+        font-family: "Share Tech Mono", monospace;
+        font-size: 0.62rem;
+        letter-spacing: 0.1em;
+        cursor: pointer;
+        border: 1px solid var(--amber);
+        border-radius: 2px;
+        background: rgba(232, 184, 75, 0.06);
+        color: var(--amber);
+        margin-top: 4px;
+        transition: 0.15s;
+      }
+      .calib-apply:hover {
+        background: rgba(232, 184, 75, 0.14);
+      }
+      .calib-hint {
+        font-size: 0.5rem;
+        color: var(--text-dim);
+        margin-top: 6px;
+        line-height: 1.5;
+        min-height: 2em;
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <div class="logo">DAYZ<em>MAP</em></div>
+      <div class="vline"></div>
+      <div class="mapname">Chernarus+</div>
+      <div class="pill">
+        <div class="dot"></div>
+        ONLINE
+      </div>
+      <div class="hright">
+        <div class="hstat">TILES <b>xam.nu</b></div>
+        <div class="hstat">ZOOM <b id="zoom-val">—</b></div>
+        <div class="hstat">MARKERS <b id="poi-count">—</b></div>
+      </div>
+    </header>
+
+    <div class="body">
+      <div class="sidebar">
+        <div class="sb-top">
+          <div class="coords-box">
+            <div class="crow">
+              <span class="clbl">X (Leste)</span
+              ><span class="cval" id="cx">—</span>
+            </div>
+            <div class="csep"></div>
+            <div class="crow">
+              <span class="clbl">Z (Sul→Norte)</span
+              ><span class="cval" id="cz">—</span>
+            </div>
+            <div class="chint">↑ Mova o mouse sobre o mapa</div>
+          </div>
+          <div class="layer-row">
+            <button
+              class="lbtn on"
+              id="btn-topo"
+              onclick="setTile('topographic')"
+            >
+              TOPO
+            </button>
+            <button class="lbtn" id="btn-sat" onclick="setTile('satellite')">
+              SAT
+            </button>
+          </div>
+        </div>
+        <div class="sb-scroll" id="filter-root">
+          <div class="sb-status" id="sb-status">⟳ Carregando lootmap…</div>
+        </div>
+
+        <!-- ── Painel de Calibração ── -->
+        <div class="calib-wrap">
+          <div class="calib-title">Calibração de Escala</div>
+
+          <!-- Ponto 1 -->
+          <div class="calib-pt">
+            <div class="calib-pt-hd">
+              <span class="calib-pt-lbl">PONTO 1</span>
+              <button class="cpick-btn" id="cpick-0" onclick="startPick(0)">
+                ▶ Capturar do mapa
+              </button>
+            </div>
+            <div class="calib-json">
+              JSON → lat: <span id="cjlat-0">—</span> &nbsp;lng:
+              <span id="cjlng-0">—</span>
+            </div>
+            <div class="calib-row">
+              <label>X</label>
+              <input
+                class="calib-inp"
+                id="cgx-0"
+                placeholder="ex: 6500"
+                type="text"
+              />
+            </div>
+            <div class="calib-row" style="margin-top: 3px">
+              <label>Z</label>
+              <input
+                class="calib-inp"
+                id="cgz-0"
+                placeholder="ex: 2500"
+                type="text"
+              />
+            </div>
+          </div>
+
+          <!-- Ponto 2 -->
+          <div class="calib-pt">
+            <div class="calib-pt-hd">
+              <span class="calib-pt-lbl">PONTO 2</span>
+              <button class="cpick-btn" id="cpick-1" onclick="startPick(1)">
+                ▶ Capturar do mapa
+              </button>
+            </div>
+            <div class="calib-json">
+              JSON → lat: <span id="cjlat-1">—</span> &nbsp;lng:
+              <span id="cjlng-1">—</span>
+            </div>
+            <div class="calib-row">
+              <label>X</label>
+              <input
+                class="calib-inp"
+                id="cgx-1"
+                placeholder="ex: 13000"
+                type="text"
+              />
+            </div>
+            <div class="calib-row" style="margin-top: 3px">
+              <label>Z</label>
+              <input
+                class="calib-inp"
+                id="cgz-1"
+                placeholder="ex: 7800"
+                type="text"
+              />
+            </div>
+          </div>
+
+          <div class="calib-mode-row">
+            <label>Modo Z:</label>
+            <select class="calib-sel" id="c-mode">
+              <option value="mercator">Mercator (padrão)</option>
+              <option value="linear">Linear</option>
+            </select>
+          </div>
+
+          <button class="calib-apply" onclick="applyCalib()">⊙ CALIBRAR</button>
+          <div class="calib-hint" id="calib-hint">
+            Ative uma categoria, clique "Capturar" e depois clique num marcador
+            conhecido.
+          </div>
+        </div>
+      </div>
+      <div id="map"></div>
+    </div>
+
+    <footer>
+      <span>CHERNARUS+ · 15.36×15.36km</span><span>·</span>
+      <span>Tiles <b>xam.nu v1.27</b></span
+      ><span>·</span>
+      <span>Engine <b>Leaflet 1.9.4</b></span>
+      <div class="fright">Scroll = zoom · Arraste = mover · Clique = info</div>
+    </footer>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script>
+      // ════════════════════════════════════════════════════
+      //  COORDINATE SYSTEM
+      //
+      //  Chernarus game coords:
+      //    x : 0 (oeste) → 15360 (leste)
+      //    z : 0 (sul)   → 15360 (norte)
+      //
+      //  CRS.Simple (Leaflet):
+      //    lng =  x * S
+      //    lat = (z - MAP_M) * S       ← z=0/sul → lat=-256 (baixo) ✓
+      //                                    z=MAP_M/norte → lat=0 (topo) ✓
+      //
+      //  S = 256 / 15360 (zoom-0 = mapa inteiro num tile 256px)
+      // ════════════════════════════════════════════════════
+      const MAP_M = 15360;
+      const S = 256 / MAP_M;
+
+      function g2l(x, z) {
+        return L.latLng((z - MAP_M) * S, x * S);
+      }
+      function l2g(ll) {
+        return { x: Math.round(ll.lng / S), z: Math.round(ll.lat / S + MAP_M) };
+      }
+
+      // Bounds: canto SW (x=0,z=0) → NE (x=15360,z=15360)
+      const MAP_BOUNDS = L.latLngBounds(g2l(0, 0), g2l(MAP_M, MAP_M));
+
+      // ── Mapa ─────────────────────────────────────────────
+      const map = L.map("map", {
+        crs: L.CRS.Simple,
+        minZoom: 2,
+        maxZoom: 7,
+        maxBounds: MAP_BOUNDS.pad(0.04),
+        zoomControl: true,
+        attributionControl: true,
+      });
+      map.fitBounds(MAP_BOUNDS);
+
+      // ── Tiles ────────────────────────────────────────────
+      const TOPT = {
+        tileSize: 256,
+        noWrap: true,
+        bounds: MAP_BOUNDS,
+        minZoom: 0,
+        maxZoom: 7,
+        attribution:
+          'Tiles © <a href="https://xam.nu" target="_blank">xam.nu</a> | DayZ © Bohemia Interactive',
+      };
+      const tiles = {
+        topographic: L.tileLayer(
+          "https://static.xam.nu/dayz/maps/chernarusplus/1.27/topographic/{z}/{x}/{y}.webp",
+          TOPT,
+        ),
+        satellite: L.tileLayer(
+          "https://static.xam.nu/dayz/maps/chernarusplus/1.27/satellite/{z}/{x}/{y}.webp",
+          TOPT,
+        ),
+      };
+      tiles.topographic.addTo(map);
+      let curTile = "topographic";
+
+      function setTile(name) {
+        if (curTile === name) return;
+        map.removeLayer(tiles[curTile]);
+        tiles[name].addTo(map);
+        curTile = name;
+        document
+          .getElementById("btn-topo")
+          .classList.toggle("on", name === "topographic");
+        document
+          .getElementById("btn-sat")
+          .classList.toggle("on", name === "satellite");
+      }
+
+      // ── HUD ──────────────────────────────────────────────
+      map.on("mousemove", (e) => {
+        const g = l2g(e.latlng);
+        document.getElementById("cx").textContent = g.x.toLocaleString("pt-BR");
+        document.getElementById("cz").textContent = g.z.toLocaleString("pt-BR");
+      });
+      map.on("mouseout", () => {
+        document.getElementById("cx").textContent = "—";
+        document.getElementById("cz").textContent = "—";
+      });
+      map.on("zoomend", () => {
+        document.getElementById("zoom-val").textContent = map.getZoom();
+      });
+      document.getElementById("zoom-val").textContent = map.getZoom();
+
+      // ════════════════════════════════════════════════════
+      //  LOOTMAP
+      //  Fonte primária : iZurvive JSON (fetch)
+      //  Fallback       : lootmap.js local (var LOOTMAP)
+      //
+      //  Conversão iZurvive → DayZ (Mercator → coordenadas do jogo)
+      //
+      //  iZurvive usa lat/lng em projeção de mapa web. A longitude já é linear,
+      //  mas a latitude precisa ser convertida para Mercator Y antes do ajuste
+      //  para o espaço cartesiano do jogo.
+      //
+      //  Fórmulas aproximadas para Chernarus+:
+      //    mercY  = ln(tan(π/4 + latRad/2))
+      //    gameX ≈ (lng   * 49.19)  + 7815.5
+      //    gameZ ≈ (mercY * 2555.9) + 8186.2
+      //
+      //  Observação:
+      //  Os offsets podem variar levemente entre versões dos tiles/dados do
+      //  iZurvive. Se notar pequeno deslocamento, ajuste fino usando pontos de
+      //  referência conhecidos no jogo.
+      // ════════════════════════════════════════════════════
+      const LOOTMAP_URL =
+        "https://www.izurvive.com/assets/chernarus/lootmap-22255de2.json";
+
+      // ════════════════════════════════════════════════════
+      //  SISTEMA DE CALIBRAÇÃO DE 2 PONTOS
+      //
+      //  Se "um ponto alinha mas o resto não" → erro de ESCALA.
+      //  A calibração resolve empiricamente: dados 2 pares
+      //  (lmLat,lmLng)→(gameX,gameZ) calcula sX,oX,sZ,oZ exatos.
+      // ════════════════════════════════════════════════════
+      let cSX = 44.246,
+        cOX = 7962.8;
+      let cSZ = 2535.853,
+        cOZ = 7964.6;
+      let cUseMercator = true;
+
+      function mercYfn(latDeg) {
+        const r = (latDeg * Math.PI) / 180;
+        return Math.log(Math.tan(Math.PI / 4 + r / 2));
+      }
+
+      function izurviveToGame(lat, lng) {
+        const x = lng * cSX + cOX;
+        const z = cUseMercator ? mercYfn(lat) * cSZ + cOZ : lat * cSZ + cOZ;
+        return { x, z };
+      }
+
+      function lm2ll(lmLat, lmLng) {
+        const { x, z } = izurviveToGame(lmLat, lmLng);
+        return g2l(x, z);
+      }
+
+      // Armazena todos os markers para reposicionar ao calibrar
+      const allMarkers = []; // { marker, lmLat, lmLng }
+
+      // Estado de calibração
+      let calibSlots = [null, null];
+      let pickingSlot = -1;
+
+      function startPick(slot) {
+        pickingSlot = slot;
+        [0, 1].forEach((i) => {
+          const b = document.getElementById("cpick-" + i);
+          if (b) b.classList.toggle("picking", i === slot);
+        });
+        map.getContainer().style.cursor = "crosshair";
+        document.getElementById("calib-hint").textContent =
+          "Clique num marcador visível no mapa para capturar o Ponto " +
+          (slot + 1) +
+          "…";
+      }
+
+      function finishPick(lmLat, lmLng) {
+        const slot = pickingSlot;
+        if (slot < 0) return;
+        calibSlots[slot] = { lmLat, lmLng };
+        document.getElementById("cjlat-" + slot).textContent = lmLat.toFixed(5);
+        document.getElementById("cjlng-" + slot).textContent = lmLng.toFixed(5);
+        document.getElementById("cpick-" + slot).classList.remove("picking");
+        document.getElementById("calib-hint").textContent =
+          slot === 0
+            ? "✓ Pt 1 capturado! Informe coords do jogo e capture o Pt 2."
+            : "✓ Pt 2 capturado! Informe as coords do jogo e clique CALIBRAR.";
+        pickingSlot = -1;
+        map.getContainer().style.cursor = "";
+      }
+
+      map.on("click", (e) => {
+        if (pickingSlot < 0 || !allMarkers.length) return;
+        let best = null,
+          bestD = Infinity;
+        const pt = map.latLngToLayerPoint(e.latlng);
+        allMarkers.forEach((m) => {
+          const d = pt.distanceTo(map.latLngToLayerPoint(m.marker.getLatLng()));
+          if (d < bestD) {
+            bestD = d;
+            best = m;
+          }
+        });
+        if (best && bestD < 120) finishPick(best.lmLat, best.lmLng);
+        else
+          document.getElementById("calib-hint").textContent =
+            "⚠ Nenhum marcador próximo. Ative uma categoria e clique em cima de uma bolinha.";
+      });
+
+      function applyCalib() {
+        const toNum = (id) =>
+          parseFloat(
+            (document.getElementById(id).value || "").replace(",", "."),
+          );
+        const pts = [0, 1].map((i) => {
+          if (!calibSlots[i]) return null;
+          const gX = toNum("cgx-" + i),
+            gZ = toNum("cgz-" + i);
+          return isNaN(gX) || isNaN(gZ) ? null : { ...calibSlots[i], gX, gZ };
+        });
+        if (!pts[0] || !pts[1]) {
+          document.getElementById("calib-hint").textContent =
+            "⚠ Complete os 2 pontos antes de calibrar.";
+          return;
+        }
+        cUseMercator = document.getElementById("c-mode").value === "mercator";
+        cSX = (pts[1].gX - pts[0].gX) / (pts[1].lmLng - pts[0].lmLng);
+        cOX = pts[0].gX - cSX * pts[0].lmLng;
+        if (cUseMercator) {
+          const m0 = mercYfn(pts[0].lmLat),
+            m1 = mercYfn(pts[1].lmLat);
+          cSZ = (pts[1].gZ - pts[0].gZ) / (m1 - m0);
+          cOZ = pts[0].gZ - cSZ * m0;
+        } else {
+          cSZ = (pts[1].gZ - pts[0].gZ) / (pts[1].lmLat - pts[0].lmLat);
+          cOZ = pts[0].gZ - cSZ * pts[0].lmLat;
+        }
+        allMarkers.forEach(({ marker, lmLat, lmLng }) =>
+          marker.setLatLng(lm2ll(lmLat, lmLng)),
+        );
+        document.getElementById("calib-hint").innerHTML =
+          "✓ Calibrado &nbsp;|&nbsp; sX=" +
+          cSX.toFixed(3) +
+          " oX=" +
+          cOX.toFixed(1) +
+          " | sZ=" +
+          cSZ.toFixed(3) +
+          " oZ=" +
+          cOZ.toFixed(1);
+      }
+
+      const TIER_COLOR = {
+        "-1": "#aaaaaa",
+        1: "#00c853",
+        2: "#40c4ff",
+        3: "#ffd600",
+        4: "#ff3d00",
+        999: "#aa00ff",
+      };
+      const TIER_LABEL = {
+        "-1": "?",
+        1: "T1",
+        2: "T2",
+        3: "T3",
+        4: "T4",
+        999: "ÚNICO",
+      };
+
+      const SEC_META = {
+        Military: { icon: "★", color: "#4ade80" },
+        Medical: { icon: "✚", color: "#9333ea" },
+        Urban: { icon: "⬟", color: "#4a9fd4" },
+        Rural: { icon: "⌂", color: "#16a34a" },
+        Industrial: { icon: "⚙", color: "#ea580c" },
+        Coast: { icon: "⚓", color: "#0891b2" },
+        Wreck: { icon: "✖", color: "#e07c30" },
+        Landmark: { icon: "◆", color: "#d97706" },
+      };
+
+      const root = document.getElementById("filter-root");
+      const statusEl = document.getElementById("sb-status");
+      const lmRenderer = L.canvas({ padding: 0.5 });
+
+      const lmSecs = [];
+      const lmSecMap = {};
+      const lmTypeMap = {};
+      const lmTypeVis = {};
+
+      function buildLootmap(data) {
+        statusEl.remove();
+
+        const staticSections = Array.isArray(data.static) ? data.static : [];
+        let totalCreated = 0;
+
+        staticSections.forEach((section) => {
+          const sid = "lms_" + section.name.replace(/\W/g, "_");
+          const smeta = SEC_META[section.name] || { icon: "◉", color: "#888" };
+          const secInfo = {
+            id: sid,
+            label: section.name,
+            color: smeta.color,
+            icon: smeta.icon,
+            typeIds: [],
+          };
+          lmSecs.push(secInfo);
+          lmSecMap[sid] = secInfo;
+
+          (section.types || []).forEach((btype) => {
+            const tid = sid + "_" + btype.name.replace(/\W/g, "_");
+            const group = L.layerGroup();
+            let count = 0;
+
+            (btype.objects || []).forEach((obj) => {
+              if (!Array.isArray(obj.positions) || !obj.positions.length)
+                return;
+              const displayName = obj.displayName || obj.name;
+              const cats = (obj.categories || []).join(", ");
+
+              obj.positions.forEach((pos) => {
+                if (!Array.isArray(pos) || pos.length < 2) return;
+                const nums = pos.filter((v) => typeof v === "number");
+                if (nums.length < 2) return;
+
+                const ll = lm2ll(nums[0], nums[1]);
+                if (isNaN(ll.lat) || isNaN(ll.lng)) return;
+
+                const tier = nums[2] ?? -1;
+                const tc = TIER_COLOR[tier] ?? TIER_COLOR["-1"];
+                const tl = TIER_LABEL[tier] ?? TIER_LABEL["-1"];
+                const rad = tier >= 4 ? 5 : tier >= 3 ? 4 : 3;
+
+                const cm = L.circleMarker(ll, {
+                  renderer: lmRenderer,
+                  radius: rad,
+                  color: tc,
+                  fillColor: tc,
+                  fillOpacity: 0.75,
+                  weight: 1.5,
+                })
+                  .bindPopup(
+                    `<div class="pu-name">${displayName}</div>` +
+                      `<div class="pu-type">${btype.name} <span style="color:${tc};font-weight:bold">${tl}</span></div>` +
+                      (cats ? `<div class="pu-coords">${cats}</div>` : ""),
+                  )
+                  .on("click", function (e) {
+                    if (pickingSlot >= 0) {
+                      L.DomEvent.stopPropagation(e);
+                      finishPick(nums[0], nums[1]);
+                    }
+                  })
+                  .addTo(group);
+                allMarkers.push({ marker: cm, lmLat: nums[0], lmLng: nums[1] });
+                count++;
+              });
+            });
+
+            if (count > 0) {
+              lmTypeMap[tid] = {
+                id: tid,
+                label: btype.name,
+                secId: sid,
+                color: smeta.color,
+                group,
+                count,
+              };
+              lmTypeVis[tid] = false;
+              secInfo.typeIds.push(tid);
+              totalCreated += count;
+            }
+          });
+        });
+
+        document.getElementById("poi-count").textContent =
+          totalCreated.toLocaleString("pt-BR");
+
+        // ── Visibilidade ────────────────────────────────────
+        function isSecAllOn(sid) {
+          return lmSecMap[sid].typeIds.every((tid) => lmTypeVis[tid]);
+        }
+        function setLmType(tid, on) {
+          lmTypeVis[tid] = on;
+          if (on) lmTypeMap[tid].group.addTo(map);
+          else map.removeLayer(lmTypeMap[tid].group);
+          const el = document.getElementById("cbxlm-" + tid);
+          if (el) el.classList.toggle("on", on);
+          const secEl = document.getElementById(
+            "cbxlm-sec-" + lmTypeMap[tid].secId,
+          );
+          if (secEl)
+            secEl.classList.toggle("on", isSecAllOn(lmTypeMap[tid].secId));
+        }
+        function setLmSec(sid, on) {
+          lmSecMap[sid].typeIds.forEach((tid) => setLmType(tid, on));
+          const secEl = document.getElementById("cbxlm-sec-" + sid);
+          if (secEl) secEl.classList.toggle("on", on);
+        }
+
+        // ── Sidebar ─────────────────────────────────────────
+        lmSecs.forEach((sec) => {
+          if (!sec.typeIds.length) return;
+          const secTotal = sec.typeIds.reduce(
+            (s, tid) => s + lmTypeMap[tid].count,
+            0,
+          );
+
+          const hd = document.createElement("div");
+          hd.className = "sec-hd";
+          hd.innerHTML = `
+      <div class="sec-title" id="lmtitle-${sec.id}">
+        <span style="color:${sec.color};font-size:.8rem;margin-right:2px">${sec.icon}</span>
+        ${sec.label}
+        <span style="font-size:.46rem;color:var(--text-dim);margin-left:3px">(${secTotal})</span>
+      </div>
+      <div class="sec-right">
+        <div class="cbx-big" id="cbxlm-sec-${sec.id}"></div>
+        <div class="sec-arrow" id="lmarr-${sec.id}">▶</div>
+      </div>`;
+          root.appendChild(hd);
+
+          const body = document.createElement("div");
+          body.className = "sec-body";
+          body.id = "lmbody-" + sec.id;
+          body.style.display = "none";
+
+          sec.typeIds.forEach((tid) => {
+            const t = lmTypeMap[tid];
+            const row = document.createElement("div");
+            row.className = "fitem";
+            row.innerHTML = `
+        <div class="fitem-icon" style="background:${t.color};font-size:.65rem">${sec.icon}</div>
+        <span class="fitem-name">
+          ${t.label}
+          <span style="opacity:.4;font-size:.52rem">&nbsp;(${t.count})</span>
+        </span>
+        <div class="cbx" id="cbxlm-${tid}"></div>`;
+            row.onclick = () => setLmType(tid, !lmTypeVis[tid]);
+            body.appendChild(row);
+          });
+          root.appendChild(body);
+
+          const toggleCollapse = () => {
+            const b = document.getElementById("lmbody-" + sec.id);
+            const arr = document.getElementById("lmarr-" + sec.id);
+            const isOpen = b.style.display !== "none";
+            b.style.display = isOpen ? "none" : "";
+            arr.classList.toggle("open", !isOpen);
+          };
+          hd.querySelector("#lmtitle-" + sec.id).onclick = toggleCollapse;
+          hd.querySelector("#lmarr-" + sec.id).onclick = toggleCollapse;
+          hd.querySelector("#cbxlm-sec-" + sec.id).onclick = (e) => {
+            e.stopPropagation();
+            setLmSec(sec.id, !isSecAllOn(sec.id));
+          };
+        });
+      }
+
+      function showError(html) {
+        statusEl.className = "sb-status err";
+        statusEl.innerHTML = html;
+      }
+
+      // ── Carregar: iZurvive → fallback lootmap.js local ───
+      fetch(LOOTMAP_URL)
+        .then((r) => {
+          if (!r.ok) throw new Error("HTTP " + r.status);
+          return r.json();
+        })
+        .then(buildLootmap)
+        .catch((fetchErr) => {
+          console.warn(
+            "[LOOTMAP] fetch bloqueado, tentando lootmap.js local…",
+            fetchErr.message,
+          );
+          // Tenta script local como fallback
+          const s = document.createElement("script");
+          s.src = "lootmap.js";
+          s.onload = () => {
+            if (typeof LOOTMAP !== "undefined") {
+              buildLootmap(LOOTMAP);
+            } else {
+              showError("⚠ lootmap.js carregado mas LOOTMAP não definido");
+            }
+          };
+          s.onerror = () =>
+            showError(
+              "⚠ Não foi possível carregar o JSON.<br>" +
+                '<span style="color:var(--text-dim)">' +
+                "Abra via servidor local (ex: <b>npx serve .</b>) ou<br>" +
+                "salve o JSON como <b>lootmap.js</b> com:<br>" +
+                '<code style="color:var(--amber)">const LOOTMAP = {…json…};</code>' +
+                "</span>",
+            );
+          document.body.appendChild(s);
+        });
+    </script>
+  </body>
+</html>
