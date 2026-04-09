@@ -140,7 +140,7 @@ export function useLeafletMap(containerRef: Ref<HTMLElement | null>) {
 
     mapStore.zoom = map.getZoom()
 
-    map.on('mousemove', (e: any) => {
+    map.on('mousemove', (e: L.LeafletMouseEvent) => {
       const g = l2g(e.latlng)
       mapStore.coords = {
         x: g.x.toLocaleString('pt-BR'),

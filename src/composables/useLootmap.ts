@@ -113,7 +113,7 @@ export function useLootmap(mapRef: Ref<L.Map | null>) {
                   `<div class="pu-type">${btype.name} <span style="color:${markerColor};font-weight:600">${section.name}</span></div>` +
                   (cats ? `<div class="pu-cats">${cats}</div>` : ''),
               )
-              .on('click', function (e: any) {
+              .on('click', function (e: L.LeafletMouseEvent) {
                 if (calibState.pickingSlot >= 0) {
                   L.DomEvent.stopPropagation(e)
                   finishPick(lmLat, lmLng)
@@ -168,7 +168,7 @@ export function useLootmap(mapRef: Ref<L.Map | null>) {
     )
 
     // Calibration: map click → snap to nearest visible marker
-    map.on('click', (e: any) => {
+    map.on('click', (e: L.LeafletMouseEvent) => {
       if (calibState.pickingSlot < 0 || !allMarkers.length) return
       let best: (typeof allMarkers)[0] | null = null
       let bestD = Infinity
