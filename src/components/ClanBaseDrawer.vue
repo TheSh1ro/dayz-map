@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { useClanBaseStore } from '@/stores/clanBaseStore'
 import type { ClanBaseCreateDraft, ClanMember } from '@/types'
 
@@ -21,9 +21,12 @@ const formError = ref<string | null>(null)
 
 const showCode = ref(false)
 const showCurrentBaseCode = ref(false)
+const showEditCode = ref(false)
 const editGateCode = ref('')
 const editError = ref<string | null>(null)
 const grantMemberId = ref('')
+const editSaveDelayMs = 700
+let editSaveTimeout: ReturnType<typeof setTimeout> | null = null
 
 const createDraft = computed(() => clanBaseStore.createDraft)
 const selectedBase = computed(() => clanBaseStore.selectedBase)
@@ -40,22 +43,32 @@ const canManageSelectedBase = computed(() =>
 const canSeeSelectedBaseCode = computed(() =>
   selectedBase.value ? clanBaseStore.canCurrentMemberSeeCode(selectedBase.value) : false,
 )
+const isSelectedBaseOwner = computed(
+  () => Boolean(selectedBase.value) && selectedBase.value?.ownerMemberId === currentMemberId.value,
+)
 
 const currentOwner = computed(() => {
   if (!selectedBase.value) return null
-  return clanBaseStore.members.find((member) => member.id === selectedBase.value?.ownerMemberId) ?? null
+  return (
+    clanBaseStore.members.find((member) => member.id === selectedBase.value?.ownerMemberId) ?? null
+  )
 })
 
 const currentStructure = computed(() => {
   if (!selectedBase.value?.structureId) return null
   return (
-    clanBaseStore.structureOptions.find((structure) => structure.id === selectedBase.value?.structureId) ?? null
+    clanBaseStore.structureOptions.find(
+      (structure) => structure.id === selectedBase.value?.structureId,
+    ) ?? null
   )
 })
 
 const createStructure = computed(() => {
   if (!formStructureId.value) return null
-  return clanBaseStore.structureOptions.find((structure) => structure.id === formStructureId.value) ?? null
+  return (
+    clanBaseStore.structureOptions.find((structure) => structure.id === formStructureId.value) ??
+    null
+  )
 })
 
 const allMembers = computed(() => clanBaseStore.members)
@@ -134,14 +147,6 @@ const createCodePreview = computed(() =>
       : 'vazio',
 )
 
-const editCodePreview = computed(() =>
-  showCurrentBaseCode.value
-    ? editGateCode.value || 'vazio'
-    : editGateCode.value
-      ? '•'.repeat(editGateCode.value.length)
-      : 'vazio',
-)
-
 const selectedBaseCodePreview = computed(() => {
   if (!selectedBase.value) return 'vazio'
   return showCurrentBaseCode.value
@@ -172,11 +177,47 @@ watch(
   (base) => {
     editError.value = null
     showCurrentBaseCode.value = false
+    showEditCode.value = false
     editGateCode.value = base?.gateCode ?? ''
     grantMemberId.value = ''
+    if (editSaveTimeout) {
+      clearTimeout(editSaveTimeout)
+      editSaveTimeout = null
+    }
   },
   { immediate: true },
 )
+
+watch([() => selectedBase.value?.id, editGateCode, isSelectedBaseOwner], () => {
+  if (editSaveTimeout) {
+    clearTimeout(editSaveTimeout)
+    editSaveTimeout = null
+  }
+
+  if (!selectedBase.value || !isSelectedBaseOwner.value) return
+  if (editGateCode.value === selectedBase.value.gateCode) return
+
+  const baseId = selectedBase.value.id
+  const gateCode = editGateCode.value
+
+  editSaveTimeout = setTimeout(() => {
+    try {
+      clanBaseStore.updateBase(baseId, { gateCode })
+      editError.value = null
+    } catch (error) {
+      editError.value = error instanceof Error ? error.message : 'Não foi possível salvar a senha.'
+    } finally {
+      editSaveTimeout = null
+    }
+  }, editSaveDelayMs)
+})
+
+onBeforeUnmount(() => {
+  if (editSaveTimeout) {
+    clearTimeout(editSaveTimeout)
+    editSaveTimeout = null
+  }
+})
 
 function sanitizeGateCode(raw: string): string {
   return clanBaseStore.sanitizeGateCodeInput(raw)
@@ -239,17 +280,6 @@ function submitCreate() {
   }
 }
 
-function saveBaseCode() {
-  if (!selectedBase.value) return
-
-  editError.value = null
-  try {
-    clanBaseStore.updateBase(selectedBase.value.id, { gateCode: editGateCode.value })
-  } catch (error) {
-    editError.value = error instanceof Error ? error.message : 'Não foi possível salvar a senha.'
-  }
-}
-
 function setClanWide(enabled: boolean) {
   if (!selectedBase.value) return
   clanBaseStore.updateBase(selectedBase.value.id, { isClanWide: enabled })
@@ -287,7 +317,9 @@ function requestAccess() {
     <div class="drawer-header">
       <div>
         <p class="drawer-kicker">Bases do clã</p>
-        <h2>{{ isCreateMode ? 'Nova base' : isViewMode ? 'Central da base' : 'Painel de base' }}</h2>
+        <h2>
+          {{ isCreateMode ? 'Nova base' : isViewMode ? 'Central da base' : 'Painel de base' }}
+        </h2>
       </div>
       <button type="button" class="close-btn" @click="closeDrawer">Fechar</button>
     </div>
@@ -296,7 +328,9 @@ function requestAccess() {
       <section class="summary-card">
         <p class="section-kicker">Rascunho</p>
         <h3>{{ formName || 'Nova base sem nome' }}</h3>
-        <p class="summary-description">Defina a referência da base e quem já entra com acesso liberado.</p>
+        <p class="summary-description">
+          Defina a referência da base e quem já entra com acesso liberado.
+        </p>
         <div class="summary-badges">
           <span class="badge">{{ createSourceLabel }}</span>
           <span class="badge accent">X {{ createDraft?.x }} / Z {{ createDraft?.z }}</span>
@@ -503,24 +537,19 @@ function requestAccess() {
             <div class="code-row">
               <input
                 :value="editGateCode"
-                type="text"
+                :type="showEditCode ? 'text' : 'password'"
                 inputmode="numeric"
                 maxlength="6"
                 placeholder="1 a 6 dígitos"
                 @input="onEditGateInput"
               />
-              <button type="button" class="ghost-btn" @click="showCurrentBaseCode = !showCurrentBaseCode">
-                {{ showCurrentBaseCode ? 'Ocultar' : 'Revelar' }}
+              <button type="button" class="ghost-btn" @click="showEditCode = !showEditCode">
+                {{ showEditCode ? 'Ocultar' : 'Revelar' }}
               </button>
             </div>
-            <small class="hint">Visualização: {{ editCodePreview }}</small>
           </div>
 
           <p v-if="editError" class="error-msg">{{ editError }}</p>
-
-          <div class="actions single-action">
-            <button type="button" class="primary-btn" @click="saveBaseCode">Salvar senha</button>
-          </div>
         </section>
 
         <section class="panel-card">
@@ -565,7 +594,12 @@ function requestAccess() {
                   {{ member.name }}
                 </option>
               </select>
-              <button type="button" class="ghost-btn" :disabled="!grantMemberId" @click="grantManualAccess">
+              <button
+                type="button"
+                class="ghost-btn"
+                :disabled="!grantMemberId"
+                @click="grantManualAccess"
+              >
                 Adicionar
               </button>
             </div>
@@ -585,10 +619,14 @@ function requestAccess() {
                     <small>{{ member.role ?? member.tag ?? 'Membro' }}</small>
                   </div>
                 </div>
-                <button type="button" class="danger-btn" @click="revokeManualAccess(member.id)">Remover</button>
+                <button type="button" class="danger-btn" @click="revokeManualAccess(member.id)">
+                  Remover
+                </button>
               </div>
 
-              <p v-if="manualAccessMembers.length === 0" class="empty-note">Nenhum acesso manual concedido.</p>
+              <p v-if="manualAccessMembers.length === 0" class="empty-note">
+                Nenhum acesso manual concedido.
+              </p>
             </div>
           </div>
 
@@ -610,12 +648,18 @@ function requestAccess() {
                   </div>
                 </div>
                 <div class="inline-row compact">
-                  <button type="button" class="ghost-btn" @click="approve(member.id)">Aprovar</button>
-                  <button type="button" class="danger-btn" @click="reject(member.id)">Recusar</button>
+                  <button type="button" class="ghost-btn" @click="approve(member.id)">
+                    Aprovar
+                  </button>
+                  <button type="button" class="danger-btn" @click="reject(member.id)">
+                    Recusar
+                  </button>
                 </div>
               </div>
 
-              <p v-if="pendingMembers.length === 0" class="empty-note">Sem solicitações pendentes.</p>
+              <p v-if="pendingMembers.length === 0" class="empty-note">
+                Sem solicitações pendentes.
+              </p>
             </div>
           </div>
         </section>
@@ -626,7 +670,9 @@ function requestAccess() {
           <div class="card-header">
             <div>
               <p class="card-title">Quem pode entrar</p>
-              <p class="card-caption">Lista efetiva de acesso considerando dono, clã e permissões manuais.</p>
+              <p class="card-caption">
+                Lista efetiva de acesso considerando dono, clã e permissões manuais.
+              </p>
             </div>
           </div>
 
@@ -658,7 +704,11 @@ function requestAccess() {
               <span class="code-preview-label">Código atual</span>
               <p class="code-preview-value">{{ selectedBaseCodePreview }}</p>
             </div>
-            <button type="button" class="ghost-btn" @click="showCurrentBaseCode = !showCurrentBaseCode">
+            <button
+              type="button"
+              class="ghost-btn"
+              @click="showCurrentBaseCode = !showCurrentBaseCode"
+            >
               {{ showCurrentBaseCode ? 'Ocultar' : 'Revelar' }}
             </button>
           </div>
@@ -710,7 +760,11 @@ function requestAccess() {
   width: 0;
   border-left: 1px solid transparent;
   background:
-    linear-gradient(180deg, color-mix(in srgb, var(--surface-hi) 32%, transparent), transparent 24%),
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--surface-hi) 32%, transparent),
+      transparent 24%
+    ),
     var(--surface);
   overflow: hidden;
 }
@@ -871,7 +925,9 @@ select {
   color: var(--text);
   padding: 9px 11px;
   font-size: 0.82rem;
-  transition: border-color 0.12s ease, box-shadow 0.12s ease;
+  transition:
+    border-color 0.12s ease,
+    box-shadow 0.12s ease;
 }
 
 input:focus,
@@ -910,7 +966,9 @@ select:focus {
   color: var(--text);
   cursor: pointer;
   text-align: left;
-  transition: border-color 0.12s ease, background 0.12s ease;
+  transition:
+    border-color 0.12s ease,
+    background 0.12s ease;
 }
 
 .switch-card.on {
@@ -946,7 +1004,9 @@ select:focus {
   padding: 2px;
   display: flex;
   align-items: center;
-  transition: background 0.12s ease, border-color 0.12s ease;
+  transition:
+    background 0.12s ease,
+    border-color 0.12s ease;
 }
 
 .switch-control.on {
@@ -1020,7 +1080,10 @@ select:focus {
   color: var(--text);
   text-align: left;
   cursor: pointer;
-  transition: border-color 0.12s ease, background 0.12s ease, transform 0.12s ease;
+  transition:
+    border-color 0.12s ease,
+    background 0.12s ease,
+    transform 0.12s ease;
 }
 
 .member-pill:hover {
@@ -1154,33 +1217,32 @@ select:focus {
 .ghost-btn,
 .danger-btn,
 .close-btn {
+  border: 1px solid var(--border-hi);
   border-radius: 10px;
-  font-size: 0.76rem;
+  font-size: 0.78rem;
   font-weight: 600;
-  padding: 8px 12px;
+  line-height: 1.2;
+  padding: 9px 12px;
   cursor: pointer;
   transition:
     border-color 0.12s ease,
     background 0.12s ease,
-    color 0.12s ease;
-}
-
-.primary-btn,
-.ghost-btn,
-.danger-btn {
-  border: 1px solid var(--border-hi);
+    color 0.12s ease,
+    box-shadow 0.12s ease;
 }
 
 .close-btn,
 .ghost-btn {
-  background: color-mix(in srgb, var(--bg) 26%, transparent);
+  background: color-mix(in srgb, var(--bg) 72%, transparent);
   color: var(--text);
 }
 
 .close-btn:hover,
 .ghost-btn:hover {
-  border-color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 52%, var(--border-hi));
+  background: color-mix(in srgb, var(--accent) 12%, var(--bg));
   color: var(--text-hi);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 20%, transparent);
 }
 
 .primary-btn {
