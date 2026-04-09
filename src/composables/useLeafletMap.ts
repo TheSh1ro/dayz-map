@@ -34,6 +34,8 @@ export function useLeafletMap(containerRef: Ref<HTMLElement | null>) {
   let resizeObserver: ResizeObserver | null = null
   let resizeRaf = 0
   let resizeSettleTimer: ReturnType<typeof setTimeout> | null = null
+  let postZoomRefreshRaf = 0
+  const postZoomRefreshCallbacks = new Set<() => void>()
 
   // ─── Coordinate Helpers ───────────────────────────────────────────────────────
   function g2l(x: number, z: number): L.LatLng {
@@ -55,7 +57,22 @@ export function useLeafletMap(containerRef: Ref<HTMLElement | null>) {
       'Tiles © <a href="https://xam.nu" target="_blank">xam.nu</a> | DayZ © Bohemia Interactive',
   }
 
-  const tileLayers: Record<string, L.TileLayer> = {}
+  const tileLayers: Partial<Record<TileType, L.TileLayer>> = {}
+
+  function applyTileSelection(tile: TileType, map: L.Map | null = mapInstance.value) {
+    if (!map) return
+
+    for (const [name, layer] of Object.entries(tileLayers) as Array<[TileType, L.TileLayer | undefined]>) {
+      if (!layer) continue
+      const isActive = name === tile
+
+      if (isActive && !map.hasLayer(layer)) layer.addTo(map)
+      if (!map.hasLayer(layer)) continue
+
+      layer.setOpacity(isActive ? 1 : 0)
+      layer.setZIndex(isActive ? 2 : 1)
+    }
+  }
 
   function syncLocationLabelVisibility(map: L.Map | null = mapInstance.value) {
     if (!map || !locationLabelLayer) return
@@ -75,6 +92,25 @@ export function useLeafletMap(containerRef: Ref<HTMLElement | null>) {
     const container = containerRef.value
     if (!container) return
     container.classList.toggle(MAP_ANIMATING_CLASS, active)
+  }
+
+  function runPostZoomRefresh(map: L.Map | null = mapInstance.value) {
+    if (!map) return
+
+    setMapAnimatingState(false)
+    mapStore.zoom = map.getZoom()
+    refreshLocationLabels(map)
+
+    for (const callback of postZoomRefreshCallbacks) callback()
+  }
+
+  function schedulePostZoomRefresh(map: L.Map | null = mapInstance.value) {
+    if (!map) return
+    if (postZoomRefreshRaf) cancelAnimationFrame(postZoomRefreshRaf)
+    postZoomRefreshRaf = requestAnimationFrame(() => {
+      postZoomRefreshRaf = 0
+      runPostZoomRefresh(map)
+    })
   }
 
   function refreshLocationLabels(map: L.Map | null = mapInstance.value) {
@@ -149,6 +185,7 @@ export function useLeafletMap(containerRef: Ref<HTMLElement | null>) {
       minZoom: 2,
       maxZoom: 7,
       maxBounds: MAP_BOUNDS.pad(0.04),
+      markerZoomAnimation: false,
       zoomControl: true,
       attributionControl: true,
     })
@@ -156,8 +193,7 @@ export function useLeafletMap(containerRef: Ref<HTMLElement | null>) {
 
     tileLayers.topographic = L.tileLayer(TILE_URLS.topographic, TILE_OPTS)
     tileLayers.satellite = L.tileLayer(TILE_URLS.satellite, TILE_OPTS)
-    const currentTileLayer = tileLayers[mapStore.currentTile]
-    if (currentTileLayer) currentTileLayer.addTo(map)
+    applyTileSelection(mapStore.currentTile, map)
     initLocationLabels(map)
 
     mapStore.zoom = map.getZoom()
@@ -172,12 +208,14 @@ export function useLeafletMap(containerRef: Ref<HTMLElement | null>) {
     map.on('mouseout', () => {
       mapStore.coords = { x: '—', z: '—' }
     })
+    map.on('zoomstart', () => {
+      setMapAnimatingState(true)
+    })
     map.on('zoomend', () => {
-      mapStore.zoom = map.getZoom()
-      refreshLocationLabels(map)
+      schedulePostZoomRefresh(map)
     })
     map.on('moveend', () => {
-      refreshLocationLabels(map)
+      schedulePostZoomRefresh(map)
     })
 
     mapInstance.value = map
@@ -191,22 +229,18 @@ export function useLeafletMap(containerRef: Ref<HTMLElement | null>) {
         mapInstance.value?.invalidateSize({ pan: false, debounceMoveend: true })
       })
       resizeSettleTimer = setTimeout(() => {
-        setMapAnimatingState(false)
-        refreshLocationLabels(mapInstance.value)
+        schedulePostZoomRefresh(mapInstance.value)
       }, 80)
     })
     resizeObserver.observe(containerRef.value)
   }
 
-  // Sync tile when store changes (e.g. from header toggle)
   watch(
     () => mapStore.currentTile,
     (next, prev) => {
-      if (!mapInstance.value) return
-      const prevLayer = tileLayers[prev]
-      const nextLayer = tileLayers[next]
-      if (prevLayer) mapInstance.value.removeLayer(prevLayer)
-      if (nextLayer) nextLayer.addTo(mapInstance.value)
+      const map = mapInstance.value
+      if (!map || next === prev) return
+      applyTileSelection(next, map)
     },
   )
 
@@ -214,8 +248,17 @@ export function useLeafletMap(containerRef: Ref<HTMLElement | null>) {
     mapStore.currentTile = name
   }
 
+  function registerPostZoomRefresh(callback: () => void) {
+    postZoomRefreshCallbacks.add(callback)
+    return () => {
+      postZoomRefreshCallbacks.delete(callback)
+    }
+  }
+
   onMounted(initMap)
   onUnmounted(() => {
+    if (postZoomRefreshRaf) cancelAnimationFrame(postZoomRefreshRaf)
+    postZoomRefreshRaf = 0
     if (resizeRaf) cancelAnimationFrame(resizeRaf)
     resizeRaf = 0
     if (resizeSettleTimer) clearTimeout(resizeSettleTimer)
@@ -240,5 +283,6 @@ export function useLeafletMap(containerRef: Ref<HTMLElement | null>) {
     mapLocations,
     goToLocation,
     repositionLocationLabels,
+    registerPostZoomRefresh,
   }
 }
