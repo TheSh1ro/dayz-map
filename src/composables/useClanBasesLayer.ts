@@ -1,12 +1,14 @@
 import { onUnmounted, watch, type Ref } from 'vue'
 import * as L from 'leaflet'
-import type { ClanBase } from '@/types'
+import type { ClanBase, ClanMember } from '@/types'
 import { gameToLeaflet } from '@/utils/mapCoordinates'
 import { MAP_M, S } from '@/config'
 
 type UseClanBasesLayerOptions = {
   mapRef: Ref<L.Map | null>
   basesRef: Ref<ClanBase[]>
+  membersRef: Ref<ClanMember[]>
+  currentMemberIdRef: Ref<string>
   selectedBaseIdRef: Ref<string | null>
   editableRef: Ref<boolean>
   createDraftRef: Ref<{
@@ -24,7 +26,7 @@ export function useClanBasesLayer(options: UseClanBasesLayerOptions) {
   let previewMarker: L.CircleMarker | null = null
   let renderer: any = null
 
-  const markerMap = new Map<string, L.CircleMarker>()
+  const markerMap = new Map<string, L.Marker>()
 
   function leafletToGame(latlng: L.LatLng) {
     return {
@@ -39,6 +41,40 @@ export function useClanBasesLayer(options: UseClanBasesLayerOptions) {
     previewMarker = null
   }
 
+  function canCurrentMemberAccess(base: ClanBase) {
+    return (
+      base.ownerMemberId === options.currentMemberIdRef.value ||
+      base.isClanWide ||
+      base.accessMemberIds.includes(options.currentMemberIdRef.value)
+    )
+  }
+
+  function getOwnerColor(base: ClanBase) {
+    return (
+      options.membersRef.value.find((member) => member.id === base.ownerMemberId)?.avatarColor ??
+      '#38bdf8'
+    )
+  }
+
+  function buildMarkerHtml(base: ClanBase, isSelected: boolean) {
+    const color = getOwnerColor(base)
+    const hasAccess = canCurrentMemberAccess(base)
+    const iconClass = hasAccess ? 'fa-solid fa-house' : 'fa-solid fa-lock'
+    const stateClass = hasAccess ? 'is-accessible' : 'is-locked'
+    const selectedClass = isSelected ? 'is-selected' : ''
+
+    return `
+      <div
+        class="clan-base-marker ${stateClass} ${selectedClass}"
+        style="--marker-color: ${color};"
+      >
+        <div class="clan-base-marker-pin">
+          <i class="${iconClass}" aria-hidden="true"></i>
+        </div>
+      </div>
+    `
+  }
+
   function renderBases() {
     const map = options.mapRef.value
     if (!map || !layerGroup) return
@@ -47,17 +83,21 @@ export function useClanBasesLayer(options: UseClanBasesLayerOptions) {
 
     for (const base of options.basesRef.value) {
       const isSelected = options.selectedBaseIdRef.value === base.id
-      const marker = L.circleMarker(gameToLeaflet(base.x, base.z), {
-        renderer: renderer ?? undefined,
+      const hasAccess = canCurrentMemberAccess(base)
+      const marker = L.marker(gameToLeaflet(base.x, base.z), {
         bubblingMouseEvents: false,
-        radius: isSelected ? 8 : 6,
-        color: isSelected ? '#67e8f9' : '#0e7490',
-        fillColor: '#22d3ee',
-        fillOpacity: isSelected ? 0.95 : 0.88,
-        weight: isSelected ? 2.5 : 1.5,
+        keyboard: false,
+        zIndexOffset: isSelected ? 200 : hasAccess ? 120 : 80,
+        icon: L.divIcon({
+          className: 'clan-base-marker-wrap',
+          html: buildMarkerHtml(base, isSelected),
+          iconSize: [34, 34],
+          iconAnchor: [17, 17],
+          tooltipAnchor: [0, -18],
+        }),
       })
 
-      marker.bindTooltip(base.name, {
+      marker.bindTooltip(`${base.name} · ${hasAccess ? 'Com acesso' : 'Sem acesso'}`, {
         direction: 'top',
         offset: [0, -8],
         opacity: 0.95,
@@ -71,7 +111,6 @@ export function useClanBasesLayer(options: UseClanBasesLayerOptions) {
       marker.addTo(layerGroup)
       markerMap.set(base.id, marker)
     }
-
   }
 
   function renderDraftPreview() {
@@ -95,6 +134,17 @@ export function useClanBasesLayer(options: UseClanBasesLayerOptions) {
     previewMarker.addTo(layerGroup)
   }
 
+  function refreshBaseMarkers() {
+    for (const base of options.basesRef.value) {
+      markerMap.get(base.id)?.setLatLng(gameToLeaflet(base.x, base.z))
+    }
+
+    const draft = options.createDraftRef.value
+    if (previewMarker && draft && draft.sourceType === 'free') {
+      previewMarker.setLatLng(gameToLeaflet(draft.x, draft.z))
+    }
+  }
+
   function ensureLayer() {
     const map = options.mapRef.value
     if (!map || layerGroup) return
@@ -115,6 +165,8 @@ export function useClanBasesLayer(options: UseClanBasesLayerOptions) {
     [
       () => options.mapRef.value,
       () => options.basesRef.value,
+      () => options.membersRef.value,
+      () => options.currentMemberIdRef.value,
       () => options.selectedBaseIdRef.value,
       () => options.editableRef.value,
       () => options.createDraftRef.value,
@@ -139,4 +191,8 @@ export function useClanBasesLayer(options: UseClanBasesLayerOptions) {
     mapClickHandler = null
     renderer = null
   })
+
+  return {
+    refreshBaseMarkers,
+  }
 }

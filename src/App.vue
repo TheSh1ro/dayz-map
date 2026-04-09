@@ -16,23 +16,28 @@ import type { MapLocation } from '@/types'
 
 // ─── Map container ref ────────────────────────────────────────────────────────
 const mapEl = ref<HTMLElement | null>(null)
+let disposePostZoomRefresh: (() => void) | null = null
 
 // ─── Map composable ───────────────────────────────────────────────────────────
-const { mapInstance, mapLocations, goToLocation, repositionLocationLabels } =
+const { mapInstance, mapLocations, goToLocation, repositionLocationLabels, registerPostZoomRefresh } =
   useLeafletMap(mapEl)
 
 // ─── Lootmap composable ───────────────────────────────────────────────────────
-const { sections, typeMap, status, load, repositionAllMarkers } = useLootmap(mapInstance)
+const { sections, typeMap, status, load, repositionAllMarkers, refreshLootMarkers } =
+  useLootmap(mapInstance)
 
 // ─── Clan bases store + layer ─────────────────────────────────────────────────
 const clanBaseStore = useClanBaseStore()
 const mapStore = useMapStore()
-const { bases, selectedBaseId, createDraft, isDrawerOpen } = storeToRefs(clanBaseStore)
+const { members, currentMemberId, filteredBases, selectedBaseId, createDraft, isDrawerOpen } =
+  storeToRefs(clanBaseStore)
 const { isEditMode } = storeToRefs(mapStore)
 
-useClanBasesLayer({
+const { refreshBaseMarkers } = useClanBasesLayer({
   mapRef: mapInstance,
-  basesRef: bases,
+  basesRef: filteredBases,
+  membersRef: members,
+  currentMemberIdRef: currentMemberId,
   selectedBaseIdRef: selectedBaseId,
   editableRef: isEditMode,
   createDraftRef: createDraft,
@@ -59,6 +64,7 @@ function handleSelectLocation(location: MapLocation) {
 
 function handleReposition() {
   repositionAllMarkers()
+  refreshBaseMarkers()
   repositionLocationLabels()
 }
 
@@ -106,10 +112,16 @@ function handlePoiDefineBaseClick(event: Event) {
 
 onMounted(() => {
   document.addEventListener('click', handlePoiDefineBaseClick)
+  disposePostZoomRefresh = registerPostZoomRefresh(() => {
+    refreshLootMarkers()
+    refreshBaseMarkers()
+  })
 })
 
 onUnmounted(() => {
   document.removeEventListener('click', handlePoiDefineBaseClick)
+  disposePostZoomRefresh?.()
+  disposePostZoomRefresh = null
 })
 </script>
 

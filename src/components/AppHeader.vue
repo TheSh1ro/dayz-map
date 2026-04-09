@@ -19,13 +19,9 @@ function handleMemberChange(event: Event) {
 <template>
   <header class="app-header">
     <div class="header-left">
-      <span class="logo">DayZ<span class="logo-accent">Map</span></span>
+      <span class="logo">F1<span class="logo-accent">Map</span></span>
       <div class="divider" />
       <span class="map-label">Chernarus+</span>
-      <span class="badge">
-        <span class="badge-dot" />
-        Online
-      </span>
     </div>
 
     <div class="tile-toggle">
@@ -134,8 +130,13 @@ function handleMemberChange(event: Event) {
   animation: pulse 2s ease-in-out infinite;
 }
 @keyframes pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.2; }
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.2;
+  }
 }
 
 .tile-toggle {
@@ -156,7 +157,9 @@ function handleMemberChange(event: Event) {
   background: transparent;
   color: var(--text-muted);
   cursor: pointer;
-  transition: background 0.15s, color 0.15s;
+  transition:
+    background 0.15s,
+    color 0.15s;
 }
 .tile-btn:hover {
   color: var(--text);

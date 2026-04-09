@@ -64,11 +64,16 @@ export const useMapStore = defineStore('map', () => {
   }
 
   function setTypeVis(tid: string, on: boolean) {
-    typeVis.value[tid] = on
+    typeVis.value = {
+      ...typeVis.value,
+      [tid]: on,
+    }
   }
 
   function setSecVis(typeIds: string[], on: boolean) {
-    for (const tid of typeIds) typeVis.value[tid] = on
+    const next = { ...typeVis.value }
+    for (const tid of typeIds) next[tid] = on
+    typeVis.value = next
   }
 
   function isSecAllOn(typeIds: string[]): boolean {
@@ -76,7 +81,9 @@ export const useMapStore = defineStore('map', () => {
   }
 
   function toggleAll(allTypeIds: string[], on: boolean) {
-    for (const tid of allTypeIds) typeVis.value[tid] = on
+    const next = { ...typeVis.value }
+    for (const tid of allTypeIds) next[tid] = on
+    typeVis.value = next
   }
 
   function allVisible(allTypeIds: string[]): boolean {

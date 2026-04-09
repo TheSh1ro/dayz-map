@@ -9,10 +9,18 @@ import type {
 } from '@/types'
 
 const BASE_STORAGE_KEY = 'dayzmap:clan-bases:v1'
+const BASE_FILTER_STORAGE_KEY = 'dayzmap:clan-base-filters:v1'
 
 type PersistedClanBaseState = {
   currentMemberId: string
   bases: ClanBase[]
+}
+
+type ClanBaseFilterDefinition = {
+  id: string
+  label: string
+  color: string
+  count: number
 }
 
 const STRUCTURE_IMAGES = import.meta.glob('@/assets/images/*.webp', {
@@ -82,7 +90,7 @@ function isCodeValid(code: string): boolean {
   return /^\d{1,6}$/.test(code)
 }
 
-function canMemberSeeCode(memberId: string, base: ClanBase): boolean {
+function canMemberAccess(memberId: string, base: ClanBase): boolean {
   if (base.ownerMemberId === memberId) return true
   if (base.isClanWide) return true
   return base.accessMemberIds.includes(memberId)
@@ -114,11 +122,24 @@ function loadPersistedState(): PersistedClanBaseState | null {
   }
 }
 
+function loadPersistedFilterIds(): string[] | null {
+  try {
+    const raw = localStorage.getItem(BASE_FILTER_STORAGE_KEY)
+    if (!raw) return null
+
+    const parsed = JSON.parse(raw)
+    return Array.isArray(parsed) ? parsed.filter((item): item is string => typeof item === 'string') : null
+  } catch {
+    return null
+  }
+}
+
 export const useClanBaseStore = defineStore('clanBase', () => {
   const members = ref<ClanMember[]>(clanMembersSeed)
   const structureOptions = ref<BaseStructureOption[]>(structureOptionsSeed)
 
   const persisted = loadPersistedState()
+  const persistedFilterIds = loadPersistedFilterIds()
 
   const currentMemberId = ref(
     persisted?.currentMemberId && clanMembersSeed.some((member) => member.id === persisted.currentMemberId)
@@ -128,6 +149,7 @@ export const useClanBaseStore = defineStore('clanBase', () => {
   const bases = ref<ClanBase[]>(persisted?.bases?.length ? persisted.bases : baseSeed)
   const selectedBaseId = ref<string | null>(null)
   const createDraft = ref<ClanBaseCreateDraft | null>(null)
+  const activeFilterIds = ref<string[]>(persistedFilterIds ?? [])
 
   const currentMember = computed(
     () => members.value.find((member) => member.id === currentMemberId.value) ?? null,
@@ -139,6 +161,52 @@ export const useClanBaseStore = defineStore('clanBase', () => {
 
   const isDrawerOpen = computed(() => Boolean(selectedBaseId.value || createDraft.value))
 
+  const baseFilters = computed<ClanBaseFilterDefinition[]>(() => {
+    const ownerFilters = members.value
+      .filter((member) => bases.value.some((base) => base.ownerMemberId === member.id))
+      .map((member) => ({
+        id: `owner:${member.id}`,
+        label: member.name,
+        color: member.avatarColor ?? '#94a3b8',
+        count: bases.value.filter((base) => base.ownerMemberId === member.id).length,
+      }))
+
+    return [
+      {
+        id: 'public',
+        label: 'Públicas',
+        color: '#22c55e',
+        count: bases.value.filter((base) => base.isClanWide).length,
+      },
+      {
+        id: 'mine',
+        label: 'Minhas',
+        color: '#38bdf8',
+        count: bases.value.filter((base) => canMemberAccess(currentMemberId.value, base)).length,
+      },
+      ...ownerFilters,
+    ]
+  })
+
+  const allFilterIds = computed(() => baseFilters.value.map((filter) => filter.id))
+
+  const filteredBases = computed(() => {
+    const activeIds = new Set(activeFilterIds.value)
+    if (activeIds.size === 0) return []
+
+    return bases.value.filter((base) => {
+      if (activeIds.has('public') && base.isClanWide) return true
+      if (activeIds.has('mine') && canMemberAccess(currentMemberId.value, base)) return true
+      return activeIds.has(`owner:${base.ownerMemberId}`)
+    })
+  })
+
+  const allFiltersActive = computed(
+    () =>
+      allFilterIds.value.length > 0 &&
+      allFilterIds.value.every((filterId) => activeFilterIds.value.includes(filterId)),
+  )
+
   function persistState() {
     const payload: PersistedClanBaseState = {
       currentMemberId: currentMemberId.value,
@@ -148,6 +216,40 @@ export const useClanBaseStore = defineStore('clanBase', () => {
   }
 
   watch([currentMemberId, bases], persistState, { deep: true })
+  watch(
+    allFilterIds,
+    (nextIds, previousIds = []) => {
+      const previousIdSet = new Set(previousIds)
+      const nextIdSet = new Set(nextIds)
+      const normalized = activeFilterIds.value.filter((id) => nextIdSet.has(id))
+
+      const shouldInitializeAll =
+        persistedFilterIds === null && previousIds.length === 0 && activeFilterIds.value.length === 0
+
+      if (shouldInitializeAll) {
+        activeFilterIds.value = [...nextIds]
+        return
+      }
+
+      if (activeFilterIds.value.length > 0) {
+        for (const id of nextIds) {
+          if (!previousIdSet.has(id) && !normalized.includes(id)) {
+            normalized.push(id)
+          }
+        }
+      }
+
+      activeFilterIds.value = normalized
+    },
+    { immediate: true },
+  )
+  watch(
+    activeFilterIds,
+    (ids) => {
+      localStorage.setItem(BASE_FILTER_STORAGE_KEY, JSON.stringify(ids))
+    },
+    { deep: true },
+  )
 
   function selectMember(id: string) {
     if (!members.value.some((member) => member.id === id)) return
@@ -157,6 +259,18 @@ export const useClanBaseStore = defineStore('clanBase', () => {
   function selectBase(id: string | null) {
     selectedBaseId.value = id
     if (id) createDraft.value = null
+  }
+
+  function toggleFilter(id: string) {
+    if (!allFilterIds.value.includes(id)) return
+
+    activeFilterIds.value = activeFilterIds.value.includes(id)
+      ? activeFilterIds.value.filter((filterId) => filterId !== id)
+      : [...activeFilterIds.value, id]
+  }
+
+  function setAllFilters(enabled: boolean) {
+    activeFilterIds.value = enabled ? [...allFilterIds.value] : []
   }
 
   function closeDrawer() {
@@ -317,11 +431,15 @@ export const useClanBaseStore = defineStore('clanBase', () => {
   }
 
   function canCurrentMemberSeeCode(base: ClanBase) {
-    return canMemberSeeCode(currentMemberId.value, base)
+    return canMemberAccess(currentMemberId.value, base)
   }
 
   function canCurrentMemberManage(base: ClanBase) {
     return base.ownerMemberId === currentMemberId.value
+  }
+
+  function canCurrentMemberAccess(base: ClanBase) {
+    return canMemberAccess(currentMemberId.value, base)
   }
 
   function sanitizeGateCodeInput(raw: string): string {
@@ -338,8 +456,14 @@ export const useClanBaseStore = defineStore('clanBase', () => {
     selectedBase,
     createDraft,
     isDrawerOpen,
+    baseFilters,
+    activeFilterIds,
+    filteredBases,
+    allFiltersActive,
     selectMember,
     selectBase,
+    toggleFilter,
+    setAllFilters,
     closeDrawer,
     startCreateFromPoi,
     startCreateFromMapClick,
@@ -350,6 +474,7 @@ export const useClanBaseStore = defineStore('clanBase', () => {
     rejectRequest,
     grantManualAccess,
     revokeManualAccess,
+    canCurrentMemberAccess,
     canCurrentMemberSeeCode,
     canCurrentMemberManage,
     sanitizeGateCodeInput,

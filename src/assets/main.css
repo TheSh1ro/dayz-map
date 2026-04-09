@@ -163,6 +163,60 @@ body {
   line-height: 1.5;
 }
 
+.clan-base-marker-wrap {
+  background: transparent !important;
+  border: 0 !important;
+}
+
+.clan-base-marker {
+  position: relative;
+  width: 34px;
+  height: 34px;
+  filter: drop-shadow(0 8px 16px rgba(0, 0, 0, 0.45));
+}
+
+.clan-base-marker-pin {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.5rem;
+  height: 1.5rem;
+  border-radius: 999px;
+  border: 2px solid color-mix(in srgb, var(--marker-color) 72%, #ffffff);
+  color: color-mix(in srgb, var(--marker-color) 88%, #ffffff);
+  box-shadow:
+    0 0 0 1px rgba(8, 18, 23, 0.68),
+    0 0 18px color-mix(in srgb, var(--marker-color) 22%, transparent);
+  transition:
+    transform 0.15s ease,
+    box-shadow 0.15s ease,
+    border-color 0.15s ease;
+}
+
+.clan-base-marker i {
+  font-size: 0.9rem;
+}
+
+.clan-base-marker.is-accessible .clan-base-marker-pin {
+  border-color: color-mix(in srgb, var(--marker-color) 82%, #ffffff);
+}
+
+.clan-base-marker.is-locked .clan-base-marker-pin {
+  color: color-mix(in srgb, var(--marker-color) 30%, #d1d5db);
+  background:
+    radial-gradient(circle at 30% 30%, rgba(255, 255, 255, 0.18), transparent 46%),
+    color-mix(in srgb, #111827 72%, var(--marker-color));
+}
+
+.clan-base-marker.is-selected .clan-base-marker-pin {
+  transform: scale(1.1);
+  border-color: #e0f2fe;
+  box-shadow:
+    0 0 0 1px rgba(8, 18, 23, 0.82),
+    0 0 0 5px color-mix(in srgb, #67e8f9 28%, transparent),
+    0 0 22px color-mix(in srgb, var(--marker-color) 26%, transparent);
+}
+
 .pu-name {
   font-weight: 600;
   color: var(--text-hi);

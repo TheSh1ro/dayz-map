@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
+import { useClanBaseStore } from '@/stores/clanBaseStore'
 import { useMapStore } from '@/stores/mapStore'
 import FilterSection from '@/components/FilterSection.vue'
 import type { LmSection, LmType } from '@/types'
@@ -11,14 +12,21 @@ const props = defineProps<{
 }>()
 
 const mapStore = useMapStore()
+const clanBaseStore = useClanBaseStore()
 
 const allTypeIds = computed(() => props.sections.flatMap((s) => s.typeIds))
 const allOn = computed(() => mapStore.isEditMode && mapStore.allVisible(allTypeIds.value))
 const isEditMode = computed(() => mapStore.viewMode === 'edit')
+const clanFilters = computed(() => clanBaseStore.baseFilters)
+const clanFiltersAllOn = computed(() => clanBaseStore.allFiltersActive)
 
 function toggleAll() {
   const next = !allOn.value
   mapStore.toggleAll(allTypeIds.value, next)
+}
+
+function toggleAllClanFilters() {
+  clanBaseStore.setAllFilters(!clanFiltersAllOn.value)
 }
 
 function activateEditMode() {
@@ -77,10 +85,38 @@ function activateClanBasesMode() {
 
     <!-- Status / sections -->
     <div class="filter-scroll">
-      <div v-if="!isEditMode" class="mode-state-card">
-        <span class="mode-state-kicker">Bases do clã</span>
-        <p>O mapa está focado nas bases existentes. Ative o modo edição para revisar POIs e filtros.</p>
-      </div>
+      <template v-if="!isEditMode">
+        <div class="filter-header filter-subheader clan-filter-header">
+          <span class="filter-title">Filtros de bases</span>
+          <button
+            v-if="clanFilters.length > 0"
+            class="toggle-all-btn"
+            :class="{ on: clanFiltersAllOn }"
+            @click="toggleAllClanFilters"
+          >
+            {{ clanFiltersAllOn ? 'Ocultar tudo' : 'Mostrar tudo' }}
+          </button>
+        </div>
+
+        <div class="clan-filter-list">
+          <button
+            v-for="filter in clanFilters"
+            :key="filter.id"
+            type="button"
+            class="clan-filter-item"
+            :class="{ on: clanBaseStore.activeFilterIds.includes(filter.id) }"
+            :style="{ '--filter-color': filter.color }"
+            @click="clanBaseStore.toggleFilter(filter.id)"
+          >
+            <span class="clan-filter-swatch" />
+            <span class="clan-filter-label">{{ filter.label }}</span>
+            <span class="clan-filter-count">{{ filter.count }}</span>
+            <span class="clan-filter-toggle" :class="{ on: clanBaseStore.activeFilterIds.includes(filter.id) }">
+              <span class="clan-filter-toggle-thumb" />
+            </span>
+          </button>
+        </div>
+      </template>
 
       <div v-if="status.loading" class="status-msg">
         <span class="spinner" />
@@ -101,12 +137,7 @@ function activateClanBasesMode() {
             {{ allOn ? 'Ocultar tudo' : 'Mostrar tudo' }}
           </button>
         </div>
-        <FilterSection
-          v-for="sec in sections"
-          :key="sec.id"
-          :section="sec"
-          :type-map="typeMap"
-        />
+        <FilterSection v-for="sec in sections" :key="sec.id" :section="sec" :type-map="typeMap" />
       </template>
     </div>
 
@@ -193,7 +224,10 @@ function activateClanBasesMode() {
   background: transparent;
   color: var(--text-muted);
   cursor: pointer;
-  transition: border-color 0.15s, color 0.15s, background 0.15s;
+  transition:
+    border-color 0.15s,
+    color 0.15s,
+    background 0.15s;
 }
 .toggle-all-btn:hover {
   border-color: var(--accent);
@@ -232,10 +266,12 @@ function activateClanBasesMode() {
   text-align: left;
   color: var(--text);
   cursor: pointer;
-  transition: border-color 0.12s ease, background 0.12s ease, transform 0.12s ease;
+  transition:
+    border-color 0.12s ease,
+    background 0.12s ease,
+    transform 0.12s ease;
 }
 .mode-btn:hover {
-  transform: translateY(-1px);
   border-color: var(--border-hi);
 }
 .mode-btn.on {
@@ -252,25 +288,100 @@ function activateClanBasesMode() {
   line-height: 1.45;
   color: var(--text-muted);
 }
-.mode-state-card {
-  margin: 12px;
-  padding: 12px;
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  background: color-mix(in srgb, var(--surface-hi) 42%, transparent);
+.clan-filter-header {
+  border-bottom: 1px solid var(--border);
 }
-.mode-state-kicker {
-  display: block;
-  margin-bottom: 6px;
-  font-size: 0.66rem;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
+.clan-filter-header .filter-title {
+  color: var(--text-muted);
+}
+.clan-filter-list {
+  padding: 2px 0 6px;
+  border-bottom: 1px solid var(--border);
+}
+.clan-filter-item {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 12px 4px 30px;
+  border: 0;
+  background: transparent;
+  appearance: none;
+  -webkit-appearance: none;
+  font: inherit;
+  line-height: normal;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.1s;
+}
+.clan-filter-item:hover {
+  background: color-mix(in srgb, var(--text) 4%, transparent);
+}
+.clan-filter-item:focus-visible {
+  outline: none;
+  background: color-mix(in srgb, var(--text) 5%, transparent);
+}
+.clan-filter-item:focus-visible .clan-filter-toggle {
+  border-color: var(--accent);
+}
+.clan-filter-item.on .clan-filter-label {
+  color: var(--text);
+}
+.clan-filter-item:not(.on) .clan-filter-label {
+  color: var(--text-muted);
+}
+.clan-filter-swatch {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background: var(--filter-color);
+  opacity: 0.7;
+}
+.clan-filter-item.on .clan-filter-swatch {
+  opacity: 1;
+}
+.clan-filter-label {
+  flex: 1;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  transition: color 0.1s;
+}
+.clan-filter-count {
+  flex-shrink: 0;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.65rem;
   color: var(--text-subtle);
 }
-.mode-state-card p {
-  font-size: 0.76rem;
-  line-height: 1.5;
-  color: var(--text-muted);
+.clan-filter-toggle {
+  flex-shrink: 0;
+  width: 28px;
+  height: 16px;
+  border-radius: 100px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  display: flex;
+  align-items: center;
+  padding: 2px;
+  transition: background 0.12s, border-color 0.12s;
+}
+.clan-filter-toggle-thumb {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--text-subtle);
+  transition: transform 0.12s, background 0.12s;
+}
+.clan-filter-toggle.on {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+.clan-filter-toggle.on .clan-filter-toggle-thumb {
+  transform: translateX(12px);
+  background: #fff;
 }
 .filter-scroll::-webkit-scrollbar {
   width: 4px;
@@ -310,6 +421,8 @@ function activateClanBasesMode() {
   flex-shrink: 0;
 }
 @keyframes spin {
-  to { transform: rotate(360deg); }
+  to {
+    transform: rotate(360deg);
+  }
 }
 </style>

@@ -60,6 +60,10 @@ export function useLootmap(mapRef: Ref<L.Map | null>) {
       poiId: string | null
     }>
   > = {}
+  let refreshRaf = 0
+  let isZoomAnimating = false
+  let mapEventsBound = false
+  let pendingVisibilitySync = false
 
   function radiusZoomFactor(zoom: number) {
     // Small points on overview, progressively larger when zooming in.
@@ -81,6 +85,47 @@ export function useLootmap(mapRef: Ref<L.Map | null>) {
     }
   }
 
+  function refreshLootMarkers(map: L.Map | null = mapRef.value) {
+    if (!map) return
+
+    for (const { marker, lmLat, lmLng } of allMarkers) {
+      marker.setLatLng(izurviveToLeaflet(lmLat, lmLng))
+      if (typeof marker.redraw === 'function') marker.redraw()
+    }
+
+    applyMarkerSizesByZoom(map)
+
+    for (const { marker } of allMarkers) {
+      if (typeof marker.redraw === 'function') marker.redraw()
+    }
+  }
+
+  function scheduleLootRefresh(map: L.Map | null = mapRef.value) {
+    if (!map) return
+    if (refreshRaf) cancelAnimationFrame(refreshRaf)
+    refreshRaf = requestAnimationFrame(() => {
+      refreshRaf = 0
+      isZoomAnimating = false
+      refreshLootMarkers(map)
+      if (pendingVisibilitySync) {
+        pendingVisibilitySync = false
+        syncMarkerVisibility()
+      }
+    })
+  }
+
+  function bindMapEvents(map: L.Map) {
+    if (mapEventsBound) return
+    mapEventsBound = true
+
+    map.on('zoomstart', () => {
+      isZoomAnimating = true
+    })
+    map.on('zoomend', () => {
+      scheduleLootRefresh(map)
+    })
+  }
+
   function usedPoiIds() {
     return new Set(
       clanBaseStore.bases
@@ -92,6 +137,11 @@ export function useLootmap(mapRef: Ref<L.Map | null>) {
   function syncMarkerVisibility() {
     const map = mapRef.value
     if (!map) return
+    const mapIsAnimatingZoom = Boolean((map as L.Map & { _animatingZoom?: boolean })._animatingZoom)
+    if (isZoomAnimating || mapIsAnimatingZoom) {
+      pendingVisibilitySync = true
+      return
+    }
 
     const editMode = mapStore.isEditMode
     const blockedPoiIds = usedPoiIds()
@@ -121,6 +171,7 @@ export function useLootmap(mapRef: Ref<L.Map | null>) {
   function buildFromData(data: LootmapData) {
     const map = mapRef.value
     if (!map) return
+    bindMapEvents(map)
 
     const staticSections = Array.isArray(data.static) ? data.static : []
     const allTypeIds: string[] = []
@@ -266,7 +317,8 @@ export function useLootmap(mapRef: Ref<L.Map | null>) {
         calibState.hint =
           '⚠ Nenhum marcador próximo. Ative uma categoria e clique em cima de uma bolinha.'
     })
-    map.on('zoomend', () => applyMarkerSizesByZoom(map))
+    applyMarkerSizesByZoom(map)
+    if (!isZoomAnimating) refreshLootMarkers(map)
   }
 
   // ─── Load ─────────────────────────────────────────────────────────────────────
@@ -313,10 +365,8 @@ export function useLootmap(mapRef: Ref<L.Map | null>) {
   // ─── Calibration helper ───────────────────────────────────────────────────────
   /** Called by CalibrationPanel after applyCalib updates calibState constants. */
   function repositionAllMarkers() {
-    for (const { marker, lmLat, lmLng } of allMarkers) {
-      marker.setLatLng(izurviveToLeaflet(lmLat, lmLng))
-    }
+    refreshLootMarkers()
   }
 
-  return { sections, typeMap, status, load, repositionAllMarkers }
+  return { sections, typeMap, status, load, repositionAllMarkers, refreshLootMarkers }
 }
