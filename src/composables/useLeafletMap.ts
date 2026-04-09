@@ -13,6 +13,7 @@ type LocationLabel = {
 }
 
 const LABEL_PANE_NAME = 'settlement-label-pane'
+const MAP_ANIMATING_CLASS = 'map-overlay-animating'
 
 function escapeHtml(raw: string): string {
   return raw
@@ -30,6 +31,9 @@ export function useLeafletMap(containerRef: Ref<HTMLElement | null>) {
 
   const locationLabels: LocationLabel[] = []
   let locationLabelLayer: L.LayerGroup | null = null
+  let resizeObserver: ResizeObserver | null = null
+  let resizeRaf = 0
+  let resizeSettleTimer: ReturnType<typeof setTimeout> | null = null
 
   // ─── Coordinate Helpers ───────────────────────────────────────────────────────
   function g2l(x: number, z: number): L.LatLng {
@@ -67,6 +71,24 @@ export function useLeafletMap(containerRef: Ref<HTMLElement | null>) {
     }
   }
 
+  function setMapAnimatingState(active: boolean) {
+    const container = containerRef.value
+    if (!container) return
+    container.classList.toggle(MAP_ANIMATING_CLASS, active)
+  }
+
+  function refreshLocationLabels(map: L.Map | null = mapInstance.value) {
+    if (!map || !locationLabelLayer) return
+
+    syncLocationLabelVisibility(map)
+
+    for (const entry of locationLabels) {
+      if (!entry.isVisible) continue
+      locationLabelLayer.removeLayer(entry.marker)
+      entry.marker.addTo(locationLabelLayer)
+    }
+  }
+
   function initLocationLabels(map: L.Map) {
     if (!map.getPane(LABEL_PANE_NAME)) map.createPane(LABEL_PANE_NAME)
     map.getPane(LABEL_PANE_NAME)?.classList.add('settlement-label-pane')
@@ -99,7 +121,7 @@ export function useLeafletMap(containerRef: Ref<HTMLElement | null>) {
     for (const entry of locationLabels) {
       entry.marker.setLatLng(mapLocationToLeaflet(entry.location))
     }
-    syncLocationLabelVisibility()
+    refreshLocationLabels()
   }
 
   function goToLocation(
@@ -152,10 +174,28 @@ export function useLeafletMap(containerRef: Ref<HTMLElement | null>) {
     })
     map.on('zoomend', () => {
       mapStore.zoom = map.getZoom()
-      syncLocationLabelVisibility(map)
+      refreshLocationLabels(map)
+    })
+    map.on('moveend', () => {
+      refreshLocationLabels(map)
     })
 
     mapInstance.value = map
+
+    resizeObserver = new ResizeObserver(() => {
+      if (!mapInstance.value) return
+      setMapAnimatingState(true)
+      if (resizeRaf) cancelAnimationFrame(resizeRaf)
+      if (resizeSettleTimer) clearTimeout(resizeSettleTimer)
+      resizeRaf = requestAnimationFrame(() => {
+        mapInstance.value?.invalidateSize({ pan: false, debounceMoveend: true })
+      })
+      resizeSettleTimer = setTimeout(() => {
+        setMapAnimatingState(false)
+        refreshLocationLabels(mapInstance.value)
+      }, 80)
+    })
+    resizeObserver.observe(containerRef.value)
   }
 
   // Sync tile when store changes (e.g. from header toggle)
@@ -176,6 +216,13 @@ export function useLeafletMap(containerRef: Ref<HTMLElement | null>) {
 
   onMounted(initMap)
   onUnmounted(() => {
+    if (resizeRaf) cancelAnimationFrame(resizeRaf)
+    resizeRaf = 0
+    if (resizeSettleTimer) clearTimeout(resizeSettleTimer)
+    resizeSettleTimer = null
+    resizeObserver?.disconnect()
+    resizeObserver = null
+
     locationLabelLayer?.clearLayers()
     locationLabelLayer = null
     locationLabels.length = 0
