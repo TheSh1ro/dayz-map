@@ -2,6 +2,7 @@ declare module 'leaflet' {
   export type CircleMarker = any
   export type LatLng = any
   export type LayerGroup = any
+  export type LeafletMouseEvent = any
   export type Map = any
   export type Marker = any
   export type TileLayer = any

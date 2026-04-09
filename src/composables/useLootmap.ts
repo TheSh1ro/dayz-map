@@ -6,6 +6,30 @@ import { SEC_META, DEFAULT_VISIBLE_SECTION } from '@/config'
 import type { LmSection, LmType, LootmapData } from '@/types'
 import { izurviveToLeaflet } from '@/utils/mapCoordinates'
 
+const PREVIEW_IMAGES = import.meta.glob('@/assets/images/*.webp', {
+  eager: true,
+  import: 'default',
+}) as Record<string, string>
+
+const previewByLootName: Record<string, string> = Object.fromEntries(
+  Object.entries(PREVIEW_IMAGES)
+    .map(([path, src]) => {
+      const filename = path.split('/').pop()
+      if (!filename) return null
+      return [filename.replace(/\.webp$/i, ''), src] as const
+    })
+    .filter((entry): entry is readonly [string, string] => entry !== null),
+)
+
+function escapeHtml(text: string) {
+  return text
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#39;')
+}
+
 export function useLootmap(mapRef: Ref<L.Map | null>) {
   const mapStore = useMapStore()
 
@@ -82,6 +106,7 @@ export function useLootmap(mapRef: Ref<L.Map | null>) {
           if (!Array.isArray(obj.positions) || !obj.positions.length) continue
           const displayName = obj.displayName ?? obj.name
           const cats = (obj.categories ?? []).join(', ')
+          const previewSrc = previewByLootName[obj.name] ?? previewByLootName[obj.name.toLowerCase()]
 
           for (const pos of obj.positions) {
             if (!Array.isArray(pos) || pos.length < 2) continue
@@ -99,6 +124,13 @@ export function useLootmap(mapRef: Ref<L.Map | null>) {
             const markerColor = smeta.color
 
             const initialRadius = scaledRadius(rad, map.getZoom())
+            const displayNameSafe = escapeHtml(displayName)
+            const btypeNameSafe = escapeHtml(btype.name)
+            const sectionNameSafe = escapeHtml(section.name)
+            const catsSafe = escapeHtml(cats)
+            const previewHtml = previewSrc
+              ? `<div class="pu-preview-wrap"><img class="pu-preview" src="${previewSrc}" alt="Preview ${displayNameSafe}" loading="lazy" /></div>`
+              : ''
 
             const cm = L.circleMarker(ll, {
               renderer,
@@ -109,9 +141,10 @@ export function useLootmap(mapRef: Ref<L.Map | null>) {
               weight: initialRadius <= 2 ? 1 : 1.25,
             })
               .bindPopup(
-                `<div class="pu-name">${displayName}</div>` +
-                  `<div class="pu-type">${btype.name} <span style="color:${markerColor};font-weight:600">${section.name}</span></div>` +
-                  (cats ? `<div class="pu-cats">${cats}</div>` : ''),
+                `<div class="pu-name">${displayNameSafe}</div>` +
+                  `<div class="pu-type">${btypeNameSafe} <span style="color:${markerColor};font-weight:600">${sectionNameSafe}</span></div>` +
+                  previewHtml +
+                  (cats ? `<div class="pu-cats">${catsSafe}</div>` : ''),
               )
               .on('click', function (e: L.LeafletMouseEvent) {
                 if (calibState.pickingSlot >= 0) {

@@ -178,3 +178,17 @@ body {
   padding-top: 6px;
   margin-top: 4px;
 }
+
+.pu-preview-wrap {
+  margin: 8px 0;
+}
+
+.pu-preview {
+  display: block;
+  width: 220px;
+  max-width: 100%;
+  height: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  object-fit: cover;
+}
