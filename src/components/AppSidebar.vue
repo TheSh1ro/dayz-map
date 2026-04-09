@@ -105,10 +105,10 @@ function activateClanBasesMode() {
             type="button"
             class="clan-filter-item"
             :class="{ on: clanBaseStore.activeFilterIds.includes(filter.id) }"
-            :style="{ '--filter-color': filter.color }"
+            :style="filter.color ? { '--filter-color': filter.color } : undefined"
             @click="clanBaseStore.toggleFilter(filter.id)"
           >
-            <span class="clan-filter-swatch" />
+            <span class="clan-filter-swatch" :class="{ neutral: !filter.color }" />
             <span class="clan-filter-label">{{ filter.label }}</span>
             <span class="clan-filter-count">{{ filter.count }}</span>
             <span class="clan-filter-toggle" :class="{ on: clanBaseStore.activeFilterIds.includes(filter.id) }">
@@ -337,9 +337,18 @@ function activateClanBasesMode() {
   flex-shrink: 0;
   background: var(--filter-color);
   opacity: 0.7;
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--filter-color) 28%, transparent);
+}
+.clan-filter-swatch.neutral {
+  background: color-mix(in srgb, var(--text-subtle) 60%, transparent);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--border-hi) 85%, transparent);
 }
 .clan-filter-item.on .clan-filter-swatch {
   opacity: 1;
+}
+.clan-filter-item.on .clan-filter-swatch.neutral {
+  background: color-mix(in srgb, var(--text) 78%, var(--surface));
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--text-muted) 58%, transparent);
 }
 .clan-filter-label {
   flex: 1;

@@ -49,15 +49,13 @@ export function useClanBasesLayer(options: UseClanBasesLayerOptions) {
     )
   }
 
-  function getOwnerColor(base: ClanBase) {
-    return (
-      options.membersRef.value.find((member) => member.id === base.ownerMemberId)?.avatarColor ??
-      '#38bdf8'
-    )
+  function getMarkerColor(base: ClanBase) {
+    if (base.isClanWide) return '#22c55e'
+    return canCurrentMemberAccess(base) ? '#2563eb' : '#ef4444'
   }
 
   function buildMarkerHtml(base: ClanBase, isSelected: boolean) {
-    const color = getOwnerColor(base)
+    const color = getMarkerColor(base)
     const hasAccess = canCurrentMemberAccess(base)
     const iconClass = hasAccess ? 'fa-solid fa-house' : 'fa-solid fa-lock'
     const stateClass = hasAccess ? 'is-accessible' : 'is-locked'

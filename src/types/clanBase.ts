@@ -21,7 +21,7 @@ export interface ClanBase {
   sourcePoiId?: string
   structureId?: string
   ownerMemberId: string
-  gateCode: string
+  gateCodes: [string, string]
   isClanWide: boolean
   accessMemberIds: string[]
   pendingRequestMemberIds: string[]
@@ -35,7 +35,7 @@ export interface ClanBaseCreateDraft {
   sourceType: 'poi' | 'free'
   sourcePoiId?: string
   structureId?: string
-  gateCode: string
+  gateCodes: [string, string]
   isClanWide: boolean
   accessMemberIds: string[]
 }

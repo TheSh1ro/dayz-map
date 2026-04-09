@@ -8,7 +8,7 @@ import type {
   StartCreateFromPoiPayload,
 } from '@/types'
 
-const BASE_STORAGE_KEY = 'dayzmap:clan-bases:v1'
+const BASE_STORAGE_KEY = 'dayzmap:clan-bases:v2'
 const BASE_FILTER_STORAGE_KEY = 'dayzmap:clan-base-filters:v1'
 
 type PersistedClanBaseState = {
@@ -19,7 +19,7 @@ type PersistedClanBaseState = {
 type ClanBaseFilterDefinition = {
   id: string
   label: string
-  color: string
+  color?: string
   count: number
 }
 
@@ -60,7 +60,7 @@ const baseSeed: ClanBase[] = [
     sourcePoiId: 'poi-seed-vybor',
     structureId: structureOptionsSeed[0]?.id,
     ownerMemberId: 'm1',
-    gateCode: '4521',
+    gateCodes: ['4521', '7788'],
     isClanWide: false,
     accessMemberIds: ['m2'],
     pendingRequestMemberIds: ['m3'],
@@ -74,7 +74,7 @@ const baseSeed: ClanBase[] = [
     sourceType: 'free',
     structureId: structureOptionsSeed[1]?.id,
     ownerMemberId: 'm2',
-    gateCode: '900',
+    gateCodes: ['900', ''],
     isClanWide: true,
     accessMemberIds: ['m4'],
     pendingRequestMemberIds: [],
@@ -90,6 +90,14 @@ function isCodeValid(code: string): boolean {
   return /^\d{1,6}$/.test(code)
 }
 
+function normalizeGateCodes(gateCodes: [string, string]): [string, string] {
+  return [sanitizeCodeInput(gateCodes[0] ?? ''), sanitizeCodeInput(gateCodes[1] ?? '')]
+}
+
+function areGateCodesValid(gateCodes: [string, string]): boolean {
+  return isCodeValid(gateCodes[0]) && (gateCodes[1] === '' || isCodeValid(gateCodes[1]))
+}
+
 function canMemberAccess(memberId: string, base: ClanBase): boolean {
   if (base.ownerMemberId === memberId) return true
   if (base.isClanWide) return true
@@ -99,7 +107,8 @@ function canMemberAccess(memberId: string, base: ClanBase): boolean {
 function normalizeBase(base: ClanBase): ClanBase {
   return {
     ...base,
-    gateCode: sanitizeCodeInput(base.gateCode),
+    name: base.name.trim(),
+    gateCodes: normalizeGateCodes(base.gateCodes),
     accessMemberIds: Array.from(new Set(base.accessMemberIds)),
     pendingRequestMemberIds: Array.from(new Set(base.pendingRequestMemberIds)),
   }
@@ -112,6 +121,16 @@ function loadPersistedState(): PersistedClanBaseState | null {
 
     const parsed = JSON.parse(raw) as PersistedClanBaseState
     if (!Array.isArray(parsed.bases) || typeof parsed.currentMemberId !== 'string') return null
+    if (
+      parsed.bases.some(
+        (base) =>
+          !Array.isArray(base.gateCodes) ||
+          base.gateCodes.length !== 2 ||
+          base.gateCodes.some((code) => typeof code !== 'string'),
+      )
+    ) {
+      return null
+    }
 
     return {
       currentMemberId: parsed.currentMemberId,
@@ -163,11 +182,13 @@ export const useClanBaseStore = defineStore('clanBase', () => {
 
   const baseFilters = computed<ClanBaseFilterDefinition[]>(() => {
     const ownerFilters = members.value
-      .filter((member) => bases.value.some((base) => base.ownerMemberId === member.id))
+      .filter(
+        (member) =>
+          member.id !== currentMemberId.value && bases.value.some((base) => base.ownerMemberId === member.id),
+      )
       .map((member) => ({
         id: `owner:${member.id}`,
         label: member.name,
-        color: member.avatarColor ?? '#94a3b8',
         count: bases.value.filter((base) => base.ownerMemberId === member.id).length,
       }))
 
@@ -181,7 +202,11 @@ export const useClanBaseStore = defineStore('clanBase', () => {
       {
         id: 'mine',
         label: 'Minhas',
-        color: '#38bdf8',
+        count: bases.value.filter((base) => base.ownerMemberId === currentMemberId.value).length,
+      },
+      {
+        id: 'access',
+        label: 'Tenho acesso',
         count: bases.value.filter((base) => canMemberAccess(currentMemberId.value, base)).length,
       },
       ...ownerFilters,
@@ -196,7 +221,8 @@ export const useClanBaseStore = defineStore('clanBase', () => {
 
     return bases.value.filter((base) => {
       if (activeIds.has('public') && base.isClanWide) return true
-      if (activeIds.has('mine') && canMemberAccess(currentMemberId.value, base)) return true
+      if (activeIds.has('mine') && base.ownerMemberId === currentMemberId.value) return true
+      if (activeIds.has('access') && canMemberAccess(currentMemberId.value, base)) return true
       return activeIds.has(`owner:${base.ownerMemberId}`)
     })
   })
@@ -290,7 +316,7 @@ export const useClanBaseStore = defineStore('clanBase', () => {
       sourceType: 'poi',
       sourcePoiId: payload.poiId,
       structureId: matchingStructure?.id,
-      gateCode: '',
+      gateCodes: ['', ''],
       isClanWide: false,
       accessMemberIds: [],
     }
@@ -306,7 +332,7 @@ export const useClanBaseStore = defineStore('clanBase', () => {
       x: roundedX,
       z: roundedZ,
       sourceType: 'free',
-      gateCode: '',
+      gateCodes: ['', ''],
       isClanWide: false,
       accessMemberIds: [],
     }
@@ -314,9 +340,9 @@ export const useClanBaseStore = defineStore('clanBase', () => {
   }
 
   function createBase(draft: ClanBaseCreateDraft) {
-    const sanitizedCode = sanitizeCodeInput(draft.gateCode)
-    if (!isCodeValid(sanitizedCode)) {
-      throw new Error('A senha deve conter de 1 a 6 dígitos numéricos.')
+    const gateCodes = normalizeGateCodes(draft.gateCodes)
+    if (!areGateCodesValid(gateCodes)) {
+      throw new Error('O portão 1 deve conter de 1 a 6 dígitos e o portão 2, quando preenchido, também.')
     }
     if (!draft.structureId) {
       throw new Error('Selecione uma estrutura de referência.')
@@ -337,7 +363,7 @@ export const useClanBaseStore = defineStore('clanBase', () => {
       sourcePoiId: draft.sourcePoiId,
       structureId: draft.structureId,
       ownerMemberId: currentMemberId.value,
-      gateCode: sanitizedCode,
+      gateCodes,
       isClanWide: draft.isClanWide,
       accessMemberIds: Array.from(new Set(draft.accessMemberIds.filter((id) => id !== currentMemberId.value))),
       pendingRequestMemberIds: [],
@@ -353,18 +379,38 @@ export const useClanBaseStore = defineStore('clanBase', () => {
     bases.value = bases.value.map((base) => {
       if (base.id !== id) return base
 
-      const gateCode =
-        typeof patch.gateCode === 'string' ? sanitizeCodeInput(patch.gateCode) : base.gateCode
-      if (!isCodeValid(gateCode)) {
-        throw new Error('A senha deve conter de 1 a 6 dígitos numéricos.')
+      const name = typeof patch.name === 'string' ? patch.name.trim() : base.name
+      if (!name) {
+        throw new Error('Informe um nome para a base.')
+      }
+
+      const structureId =
+        typeof patch.structureId === 'string' ? patch.structureId.trim() : base.structureId ?? ''
+      if (!structureId) {
+        throw new Error('Selecione uma estrutura de referência.')
+      }
+
+      const gateCodes = patch.gateCodes ? normalizeGateCodes(patch.gateCodes) : base.gateCodes
+      if (!areGateCodesValid(gateCodes)) {
+        throw new Error('O portão 1 deve conter de 1 a 6 dígitos e o portão 2, quando preenchido, também.')
       }
 
       return normalizeBase({
         ...base,
         ...patch,
-        gateCode,
+        name,
+        structureId,
+        gateCodes,
       })
     })
+  }
+
+  function deleteBase(id: string) {
+    bases.value = bases.value.filter((base) => base.id !== id)
+
+    if (selectedBaseId.value === id) {
+      selectedBaseId.value = null
+    }
   }
 
   function requestAccess(baseId: string, memberId: string) {
@@ -469,6 +515,7 @@ export const useClanBaseStore = defineStore('clanBase', () => {
     startCreateFromMapClick,
     createBase,
     updateBase,
+    deleteBase,
     requestAccess,
     approveRequest,
     rejectRequest,

@@ -11,18 +11,24 @@ const dateFormatter = new Intl.DateTimeFormat('pt-BR', {
   dateStyle: 'medium',
   timeStyle: 'short',
 })
+const gateLabels = ['Portão 1', 'Portão 2'] as const
 
 const formName = ref('')
-const formGateCode = ref('')
+const formGateCodes = ref<[string, string]>(['', ''])
 const formStructureId = ref('')
 const formIsClanWide = ref(false)
 const formManualAccessIds = ref<string[]>([])
 const formError = ref<string | null>(null)
 
-const showCode = ref(false)
-const showCurrentBaseCode = ref(false)
-const showEditCode = ref(false)
-const editGateCode = ref('')
+const showCreateCodes = ref<[boolean, boolean]>([false, false])
+const showCurrentBaseCodes = ref<[boolean, boolean]>([false, false])
+const showEditCodes = ref<[boolean, boolean]>([false, false])
+const isEditingName = ref(false)
+const isEditingStructure = ref(false)
+const editName = ref('')
+const editStructureId = ref('')
+const editGateCodes = ref<[string, string]>(['', ''])
+const detailsError = ref<string | null>(null)
 const editError = ref<string | null>(null)
 const grantMemberId = ref('')
 const editSaveDelayMs = 700
@@ -70,6 +76,18 @@ const createStructure = computed(() => {
     null
   )
 })
+
+const editStructure = computed(() => {
+  if (!editStructureId.value) return null
+  return (
+    clanBaseStore.structureOptions.find((structure) => structure.id === editStructureId.value) ??
+    null
+  )
+})
+
+const previewStructure = computed(() =>
+  canManageSelectedBase.value && isEditingStructure.value ? editStructure.value : currentStructure.value,
+)
 
 const allMembers = computed(() => clanBaseStore.members)
 
@@ -123,11 +141,11 @@ const hasPendingForCurrentMember = computed(() => {
 })
 
 const createSourceLabel = computed(() =>
-  createDraft.value?.sourceType === 'poi' ? 'POI existente' : 'Clique livre',
+  createDraft.value?.sourceType === 'poi' ? 'Normal' : 'Personalizada',
 )
 
 const selectedBaseSourceLabel = computed(() =>
-  selectedBase.value?.sourceType === 'poi' ? 'POI existente' : 'Clique livre',
+  selectedBase.value?.sourceType === 'poi' ? 'Normal' : 'Personalizada',
 )
 
 const selectedBaseAccessLabel = computed(() =>
@@ -139,21 +157,18 @@ const selectedBaseCreatedAtLabel = computed(() => {
   return dateFormatter.format(new Date(selectedBase.value.createdAt))
 })
 
-const createCodePreview = computed(() =>
-  showCode.value
-    ? formGateCode.value || 'vazio'
-    : formGateCode.value
-      ? '•'.repeat(formGateCode.value.length)
-      : 'vazio',
+const createCodePreviews = computed(() =>
+  formGateCodes.value.map((code, index) =>
+    formatGateCodePreview(code, showCreateCodes.value[index] ?? false),
+  ),
 )
 
-const selectedBaseCodePreview = computed(() => {
-  if (!selectedBase.value) return 'vazio'
-  return showCurrentBaseCode.value
-    ? selectedBase.value.gateCode || 'vazio'
-    : selectedBase.value.gateCode
-      ? '•'.repeat(selectedBase.value.gateCode.length)
-      : 'vazio'
+const selectedBaseCodePreviews = computed(() => {
+  if (!selectedBase.value) return ['não definida', 'não definida']
+
+  return selectedBase.value.gateCodes.map((code, index) =>
+    formatGateCodePreview(code, showCurrentBaseCodes.value[index] ?? false),
+  )
 })
 
 watch(
@@ -162,12 +177,12 @@ watch(
     if (!draft) return
 
     formName.value = draft.name
-    formGateCode.value = draft.gateCode
+    formGateCodes.value = [...draft.gateCodes] as [string, string]
     formStructureId.value = draft.structureId ?? ''
     formIsClanWide.value = draft.isClanWide
     formManualAccessIds.value = [...draft.accessMemberIds]
     formError.value = null
-    showCode.value = false
+    showCreateCodes.value = [false, false]
   },
   { immediate: true },
 )
@@ -175,10 +190,15 @@ watch(
 watch(
   () => selectedBase.value,
   (base) => {
+    detailsError.value = null
     editError.value = null
-    showCurrentBaseCode.value = false
-    showEditCode.value = false
-    editGateCode.value = base?.gateCode ?? ''
+    isEditingName.value = false
+    isEditingStructure.value = false
+    showCurrentBaseCodes.value = [false, false]
+    showEditCodes.value = [false, false]
+    editName.value = base?.name ?? ''
+    editStructureId.value = base?.structureId ?? ''
+    editGateCodes.value = base?.gateCodes ? ([...base.gateCodes] as [string, string]) : ['', '']
     grantMemberId.value = ''
     if (editSaveTimeout) {
       clearTimeout(editSaveTimeout)
@@ -188,24 +208,25 @@ watch(
   { immediate: true },
 )
 
-watch([() => selectedBase.value?.id, editGateCode, isSelectedBaseOwner], () => {
+watch([() => selectedBase.value?.id, () => editGateCodes.value.join('|'), isSelectedBaseOwner], () => {
   if (editSaveTimeout) {
     clearTimeout(editSaveTimeout)
     editSaveTimeout = null
   }
 
   if (!selectedBase.value || !isSelectedBaseOwner.value) return
-  if (editGateCode.value === selectedBase.value.gateCode) return
+  if (haveSameGateCodes(editGateCodes.value, selectedBase.value.gateCodes)) return
 
   const baseId = selectedBase.value.id
-  const gateCode = editGateCode.value
+  const gateCodes = [...editGateCodes.value] as [string, string]
 
   editSaveTimeout = setTimeout(() => {
     try {
-      clanBaseStore.updateBase(baseId, { gateCode })
+      clanBaseStore.updateBase(baseId, { gateCodes })
       editError.value = null
     } catch (error) {
-      editError.value = error instanceof Error ? error.message : 'Não foi possível salvar a senha.'
+      editError.value =
+        error instanceof Error ? error.message : 'Não foi possível salvar as senhas.'
     } finally {
       editSaveTimeout = null
     }
@@ -223,14 +244,27 @@ function sanitizeGateCode(raw: string): string {
   return clanBaseStore.sanitizeGateCodeInput(raw)
 }
 
-function onCreateGateInput(event: Event) {
-  const target = event.target as HTMLInputElement
-  formGateCode.value = sanitizeGateCode(target.value)
+function formatGateCodePreview(code: string, visible: boolean) {
+  if (visible) return code || 'não definida'
+  return code ? '•'.repeat(code.length) : 'não definida'
 }
 
-function onEditGateInput(event: Event) {
+function haveSameGateCodes(left: [string, string], right: [string, string]) {
+  return left[0] === right[0] && left[1] === right[1]
+}
+
+function onCreateGateInput(index: number, event: Event) {
   const target = event.target as HTMLInputElement
-  editGateCode.value = sanitizeGateCode(target.value)
+  const nextGateCodes = [...formGateCodes.value] as [string, string]
+  nextGateCodes[index] = sanitizeGateCode(target.value)
+  formGateCodes.value = nextGateCodes
+}
+
+function onEditGateInput(index: number, event: Event) {
+  const target = event.target as HTMLInputElement
+  const nextGateCodes = [...editGateCodes.value] as [string, string]
+  nextGateCodes[index] = sanitizeGateCode(target.value)
+  editGateCodes.value = nextGateCodes
 }
 
 function toggleCreateMember(memberId: string) {
@@ -259,6 +293,82 @@ function closeDrawer() {
   emit('close')
 }
 
+function startNameEdit() {
+  if (!selectedBase.value) return
+  detailsError.value = null
+  editName.value = selectedBase.value.name
+  isEditingName.value = true
+}
+
+function cancelNameEdit() {
+  if (!selectedBase.value) return
+  detailsError.value = null
+  editName.value = selectedBase.value.name
+  isEditingName.value = false
+}
+
+function saveName() {
+  if (!selectedBase.value) return
+
+  detailsError.value = null
+
+  try {
+    clanBaseStore.updateBase(selectedBase.value.id, {
+      name: editName.value,
+      structureId: selectedBase.value.structureId ?? editStructureId.value,
+    })
+    isEditingName.value = false
+  } catch (error) {
+    detailsError.value =
+      error instanceof Error ? error.message : 'Não foi possível salvar o nome da base.'
+  }
+}
+
+function startStructureEdit() {
+  if (!selectedBase.value) return
+  detailsError.value = null
+  editStructureId.value = selectedBase.value.structureId ?? ''
+  isEditingStructure.value = true
+}
+
+function cancelStructureEdit() {
+  if (!selectedBase.value) return
+  detailsError.value = null
+  editStructureId.value = selectedBase.value.structureId ?? ''
+  isEditingStructure.value = false
+}
+
+function saveStructure() {
+  if (!selectedBase.value) return
+
+  detailsError.value = null
+
+  try {
+    clanBaseStore.updateBase(selectedBase.value.id, {
+      name: selectedBase.value.name,
+      structureId: editStructureId.value,
+    })
+    isEditingStructure.value = false
+  } catch (error) {
+    detailsError.value =
+      error instanceof Error ? error.message : 'Não foi possível salvar a estrutura da base.'
+  }
+}
+
+function deleteSelectedBase() {
+  if (!selectedBase.value) return
+
+  const confirmed = window.confirm(`Excluir a base "${selectedBase.value.name}"?`)
+  if (!confirmed) return
+
+  if (editSaveTimeout) {
+    clearTimeout(editSaveTimeout)
+    editSaveTimeout = null
+  }
+
+  clanBaseStore.deleteBase(selectedBase.value.id)
+}
+
 function submitCreate() {
   if (!createDraft.value) return
 
@@ -267,7 +377,7 @@ function submitCreate() {
   const draft: ClanBaseCreateDraft = {
     ...createDraft.value,
     name: formName.value.trim(),
-    gateCode: formGateCode.value,
+    gateCodes: [...formGateCodes.value] as [string, string],
     structureId: formStructureId.value || undefined,
     isClanWide: formIsClanWide.value,
     accessMemberIds: formManualAccessIds.value,
@@ -318,7 +428,7 @@ function requestAccess() {
       <div>
         <p class="drawer-kicker">Bases do clã</p>
         <h2>
-          {{ isCreateMode ? 'Nova base' : isViewMode ? 'Central da base' : 'Painel de base' }}
+          {{ isCreateMode ? 'Nova base' : isViewMode ? 'INFORMAÇÕES DA BASE' : 'Painel de base' }}
         </h2>
       </div>
       <button type="button" class="close-btn" @click="closeDrawer">Fechar</button>
@@ -386,26 +496,30 @@ function requestAccess() {
         <div class="card-header">
           <div>
             <p class="card-title">Acesso inicial</p>
-            <p class="card-caption">Portão, abrangência e membros liberados na criação.</p>
+            <p class="card-caption">Portões, abrangência e membros liberados na criação.</p>
           </div>
         </div>
 
-        <div class="field">
-          <span>Senha do portão</span>
+        <div v-for="(label, index) in gateLabels" :key="label" class="field">
+          <span>{{ index === 0 ? label : `${label} (opcional)` }}</span>
           <div class="code-row">
             <input
-              :value="formGateCode"
-              type="text"
+              :value="formGateCodes[index]"
+              :type="showCreateCodes[index] ? 'text' : 'password'"
               inputmode="numeric"
               maxlength="6"
               placeholder="1 a 6 dígitos"
-              @input="onCreateGateInput"
+              @input="onCreateGateInput(index, $event)"
             />
-            <button type="button" class="ghost-btn" @click="showCode = !showCode">
-              {{ showCode ? 'Ocultar' : 'Revelar' }}
+            <button
+              type="button"
+              class="ghost-btn"
+              @click="showCreateCodes[index] = !showCreateCodes[index]"
+            >
+              {{ showCreateCodes[index] ? 'Ocultar' : 'Revelar' }}
             </button>
           </div>
-          <small class="hint">Visualização: {{ createCodePreview }}</small>
+          <small class="hint">Visualização: {{ createCodePreviews[index] }}</small>
         </div>
 
         <button
@@ -468,26 +582,71 @@ function requestAccess() {
 
     <div v-else-if="isViewMode && selectedBase" class="drawer-content">
       <section class="summary-card">
-        <p class="section-kicker">Base selecionada</p>
+        <div class="summary-head-row">
+          <p class="section-kicker">Base selecionada</p>
+          <div class="summary-actions">
+            <span class="badge accent">{{ selectedBaseAccessLabel }}</span>
+            <button
+              v-if="canManageSelectedBase"
+              type="button"
+              class="icon-btn danger"
+              aria-label="Excluir base"
+              @click="deleteSelectedBase"
+            >
+              <i class="fa-solid fa-trash" aria-hidden="true"></i>
+            </button>
+          </div>
+        </div>
         <div class="summary-title-row">
-          <h3>{{ selectedBase.name }}</h3>
-          <span class="badge accent">{{ selectedBaseAccessLabel }}</span>
+          <div class="summary-title-main">
+            <template v-if="canManageSelectedBase && isEditingName">
+              <div class="inline-edit-row">
+                <input
+                  v-model="editName"
+                  type="text"
+                  maxlength="60"
+                  placeholder="Nome da base"
+                  @keydown.enter.prevent="saveName"
+                  @keydown.esc.prevent="cancelNameEdit"
+                />
+                <button type="button" class="icon-btn confirm" @click="saveName">
+                  <i class="fa-solid fa-check" aria-hidden="true"></i>
+                </button>
+                <button type="button" class="icon-btn" @click="cancelNameEdit">
+                  <i class="fa-solid fa-xmark" aria-hidden="true"></i>
+                </button>
+              </div>
+            </template>
+            <template v-else>
+              <h3>{{ selectedBase.name }}</h3>
+              <button
+                v-if="canManageSelectedBase"
+                type="button"
+                class="icon-btn subtle"
+                aria-label="Editar nome da base"
+                @click="startNameEdit"
+              >
+                <i class="fa-solid fa-pen" aria-hidden="true"></i>
+              </button>
+            </template>
+          </div>
         </div>
         <p class="summary-description">
           {{ currentOwner?.name ?? 'Desconhecido' }} · criada em {{ selectedBaseCreatedAtLabel }}
         </p>
+        <p v-if="detailsError" class="error-msg">{{ detailsError }}</p>
         <div class="summary-badges">
           <span class="badge">{{ selectedBaseSourceLabel }}</span>
           <span class="badge">X {{ selectedBase.x }} / Z {{ selectedBase.z }}</span>
-          <span v-if="currentStructure" class="badge">{{ currentStructure.label }}</span>
+          <span v-if="previewStructure" class="badge">{{ previewStructure.label }}</span>
         </div>
       </section>
 
       <section class="panel-card">
         <div class="card-header">
           <div>
-            <p class="card-title">Contexto</p>
-            <p class="card-caption">Resumo rápido da base e sua referência visual.</p>
+            <p class="card-title">Informações gerais</p>
+            <!-- <p class="card-caption">Resumo rápido da base e sua referência visual.</p> -->
           </div>
         </div>
 
@@ -510,41 +669,75 @@ function requestAccess() {
           </div>
         </div>
 
-        <div v-if="currentStructure" class="structure-card">
+        <div v-if="previewStructure" class="structure-card">
+          <button
+            v-if="canManageSelectedBase"
+            type="button"
+            class="structure-overlay-btn"
+            aria-label="Editar estrutura de referência"
+            @click="startStructureEdit"
+          >
+            <span class="structure-overlay-scrim">
+              <i class="fa-solid fa-pen" aria-hidden="true"></i>
+            </span>
+          </button>
           <img
             class="structure-preview"
-            :src="currentStructure.imageSrc"
-            :alt="`Estrutura ${currentStructure.label}`"
+            :src="previewStructure.imageSrc"
+            :alt="`Estrutura ${previewStructure.label}`"
           />
           <div class="structure-meta">
-            <strong>{{ currentStructure.label }}</strong>
-            <span>Estrutura usada como referência para esta base.</span>
+            <strong>{{ previewStructure.label }}</strong>
+          </div>
+        </div>
+        <div v-if="canManageSelectedBase && isEditingStructure" class="field">
+          <span>Estrutura de referência</span>
+          <div class="inline-edit-stack">
+            <select v-model="editStructureId">
+              <option value="">Selecione...</option>
+              <option
+                v-for="structure in clanBaseStore.structureOptions"
+                :key="structure.id"
+                :value="structure.id"
+              >
+                {{ structure.label }}
+              </option>
+            </select>
+            <div class="inline-action-row">
+              <button type="button" class="ghost-btn" @click="cancelStructureEdit">Cancelar</button>
+              <button type="button" class="primary-btn" @click="saveStructure">Salvar</button>
+            </div>
           </div>
         </div>
       </section>
 
       <template v-if="canManageSelectedBase">
+
         <section class="panel-card">
           <div class="card-header">
             <div>
-              <p class="card-title">Portão</p>
-              <p class="card-caption">Edite a senha e valide a visualização atual.</p>
+              <p class="card-title">Portões</p>
+              <p class="card-caption">Edite as senhas de entrada da base.</p>
             </div>
           </div>
 
-          <div class="field">
-            <span>Senha do portão</span>
+          <div v-for="(label, index) in gateLabels" :key="label" class="field">
+            <span>{{ index === 0 ? label : `${label} (opcional)` }}</span>
             <div class="code-row">
               <input
-                :value="editGateCode"
-                :type="showEditCode ? 'text' : 'password'"
+                :value="editGateCodes[index]"
+                :type="showEditCodes[index] ? 'text' : 'password'"
                 inputmode="numeric"
                 maxlength="6"
                 placeholder="1 a 6 dígitos"
-                @input="onEditGateInput"
+                @input="onEditGateInput(index, $event)"
               />
-              <button type="button" class="ghost-btn" @click="showEditCode = !showEditCode">
-                {{ showEditCode ? 'Ocultar' : 'Revelar' }}
+              <button
+                type="button"
+                class="ghost-btn"
+                @click="showEditCodes[index] = !showEditCodes[index]"
+              >
+                {{ showEditCodes[index] ? 'Ocultar' : 'Revelar' }}
               </button>
             </div>
           </div>
@@ -669,10 +862,10 @@ function requestAccess() {
         <section class="panel-card">
           <div class="card-header">
             <div>
-              <p class="card-title">Quem pode entrar</p>
-              <p class="card-caption">
+              <p class="card-title">Quem tem acesso a essa base</p>
+              <!-- <p class="card-caption">
                 Lista efetiva de acesso considerando dono, clã e permissões manuais.
-              </p>
+              </p> -->
             </div>
           </div>
 
@@ -694,23 +887,25 @@ function requestAccess() {
         <section v-if="canSeeSelectedBaseCode" class="panel-card">
           <div class="card-header">
             <div>
-              <p class="card-title">Senha do portão</p>
-              <p class="card-caption">Exibição protegida da senha atual da base.</p>
+              <p class="card-title">Senhas dos portões</p>
+              <p class="card-caption">Exibição protegida das senhas atuais da base.</p>
             </div>
           </div>
 
-          <div class="code-preview-card">
-            <div>
-              <span class="code-preview-label">Código atual</span>
-              <p class="code-preview-value">{{ selectedBaseCodePreview }}</p>
+          <div class="code-preview-card code-preview-stack">
+            <div v-for="(label, index) in gateLabels" :key="label" class="code-preview-row">
+              <div>
+                <span class="code-preview-label">{{ label }}</span>
+                <p class="code-preview-value">{{ selectedBaseCodePreviews[index] }}</p>
+              </div>
+              <button
+                type="button"
+                class="ghost-btn"
+                @click="showCurrentBaseCodes[index] = !showCurrentBaseCodes[index]"
+              >
+                {{ showCurrentBaseCodes[index] ? 'Ocultar' : 'Revelar' }}
+              </button>
             </div>
-            <button
-              type="button"
-              class="ghost-btn"
-              @click="showCurrentBaseCode = !showCurrentBaseCode"
-            >
-              {{ showCurrentBaseCode ? 'Ocultar' : 'Revelar' }}
-            </button>
           </div>
         </section>
 
@@ -727,7 +922,7 @@ function requestAccess() {
               {{
                 hasPendingForCurrentMember
                   ? 'Solicitação enviada. Aguarde a aprovação do dono da base.'
-                  : 'Peça acesso para entrar na fila de aprovação desta base.'
+                  : 'Solicite acesso para receber as senhas dessa base.'
               }}
             </p>
             <button
@@ -838,11 +1033,32 @@ function requestAccess() {
   color: var(--text-muted);
 }
 
+.summary-head-row,
 .summary-title-row {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
   gap: 8px;
+}
+
+.summary-title-main,
+.summary-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.summary-title-main {
+  flex: 1;
+}
+
+.summary-title-main h3 {
+  min-width: 0;
+}
+
+.summary-title-row {
+  justify-content: flex-start;
 }
 
 .summary-badges {
@@ -893,6 +1109,27 @@ function requestAccess() {
 }
 
 .field {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.inline-edit-row,
+.inline-action-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.inline-edit-row {
+  flex: 1;
+}
+
+.inline-edit-row input {
+  flex: 1;
+}
+
+.inline-edit-stack {
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -1027,10 +1264,15 @@ select:focus {
 }
 
 .structure-card {
+  position: relative;
   border: 1px solid var(--border);
   border-radius: 12px;
   overflow: hidden;
   background: color-mix(in srgb, var(--bg) 26%, transparent);
+}
+
+.structure-card-compact {
+  max-width: 220px;
 }
 
 .structure-preview {
@@ -1038,6 +1280,37 @@ select:focus {
   width: 100%;
   aspect-ratio: 16 / 9;
   object-fit: cover;
+}
+
+.structure-overlay-btn {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  cursor: pointer;
+}
+
+.structure-overlay-scrim {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: color-mix(in srgb, #020617 46%, transparent);
+  color: white;
+  opacity: 0;
+  transition: opacity 0.14s ease;
+}
+
+.structure-overlay-btn:hover .structure-overlay-scrim,
+.structure-overlay-btn:focus-visible .structure-overlay-scrim {
+  opacity: 1;
+}
+
+.structure-overlay-scrim i {
+  font-size: 1rem;
 }
 
 .structure-meta {
@@ -1196,6 +1469,18 @@ select:focus {
   padding: 12px;
 }
 
+.code-preview-stack {
+  flex-direction: column;
+  align-items: stretch;
+}
+
+.code-preview-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
 .code-preview-value {
   margin-top: 4px;
   font-family: 'JetBrains Mono', monospace;
@@ -1216,7 +1501,8 @@ select:focus {
 .primary-btn,
 .ghost-btn,
 .danger-btn,
-.close-btn {
+.close-btn,
+.icon-btn {
   border: 1px solid var(--border-hi);
   border-radius: 10px;
   font-size: 0.78rem;
@@ -1237,8 +1523,20 @@ select:focus {
   color: var(--text);
 }
 
+.icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  background: color-mix(in srgb, var(--bg) 72%, transparent);
+  color: var(--text);
+}
+
 .close-btn:hover,
-.ghost-btn:hover {
+.ghost-btn:hover,
+.icon-btn:hover {
   border-color: color-mix(in srgb, var(--accent) 52%, var(--border-hi));
   background: color-mix(in srgb, var(--accent) 12%, var(--bg));
   color: var(--text-hi);
@@ -1263,6 +1561,34 @@ select:focus {
 
 .danger-btn:hover {
   background: color-mix(in srgb, var(--danger) 16%, transparent);
+}
+
+.icon-btn.confirm {
+  border-color: color-mix(in srgb, var(--accent) 60%, var(--border-hi));
+  background: color-mix(in srgb, var(--accent) 22%, transparent);
+  color: #e0f2fe;
+}
+
+.icon-btn.confirm:hover {
+  background: color-mix(in srgb, var(--accent) 30%, transparent);
+}
+
+.icon-btn.danger {
+  border-color: color-mix(in srgb, var(--danger) 52%, var(--border-hi));
+  background: color-mix(in srgb, var(--danger) 10%, transparent);
+  color: #fecaca;
+}
+
+.icon-btn.danger:hover {
+  border-color: color-mix(in srgb, var(--danger) 70%, var(--border-hi));
+  background: color-mix(in srgb, var(--danger) 16%, transparent);
+  color: #ffe4e6;
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--danger) 18%, transparent);
+}
+
+.icon-btn.subtle {
+  width: 28px;
+  height: 28px;
 }
 
 button:disabled {
