@@ -1,26 +1,33 @@
 /* ─── Design tokens ──────────────────────────────────────────────────────────── */
 :root {
-  --bg:         #0d1117;
-  --surface:    #161b22;
+  --bg: #0d1117;
+  --surface: #161b22;
   --surface-hi: #21262d;
-  --border:     #30363d;
-  --border-hi:  #484f58;
-  --accent:     #388bfd;
-  --success:    #3fb950;
-  --warning:    #d29922;
-  --danger:     #f85149;
-  --text:       #c9d1d9;
+  --border: #30363d;
+  --border-hi: #484f58;
+  --accent: #388bfd;
+  --success: #3fb950;
+  --warning: #d29922;
+  --danger: #f85149;
+  --text: #c9d1d9;
   --text-muted: #8b949e;
-  --text-subtle:#6e7681;
-  --text-hi:    #f0f6fc;
-  --radius:     6px;
-  --radius-sm:  4px;
+  --text-subtle: #6e7681;
+  --text-hi: #f0f6fc;
+  --radius: 6px;
+  --radius-sm: 4px;
 }
 
 /* ─── Reset ──────────────────────────────────────────────────────────────────── */
-*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
 
-html, body {
+html,
+body {
   height: 100%;
   overflow: hidden;
   background: var(--bg);
@@ -45,7 +52,7 @@ html, body {
 
 .leaflet-control-zoom {
   border: 1px solid var(--border) !important;
-  box-shadow: 0 2px 8px rgba(0,0,0,.4) !important;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4) !important;
   border-radius: var(--radius) !important;
   overflow: hidden;
 }
@@ -57,24 +64,70 @@ html, body {
   height: 28px !important;
   line-height: 28px !important;
   font-size: 1.1rem !important;
-  transition: color .12s, background .12s;
+  transition:
+    color 0.12s,
+    background 0.12s;
 }
 .leaflet-control-zoom a:hover {
   background: var(--surface-hi) !important;
   color: var(--text-hi) !important;
 }
-.leaflet-control-zoom-in { border-radius: 0 !important; }
-.leaflet-control-zoom-out { border-bottom: none !important; }
+.leaflet-control-zoom-in {
+  border-radius: 0 !important;
+}
+.leaflet-control-zoom-out {
+  border-bottom: none !important;
+}
 
 .leaflet-control-attribution {
-  background: rgba(13,17,23,.85) !important;
+  background: rgba(13, 17, 23, 0.85) !important;
   color: var(--text-subtle) !important;
   font-family: 'Inter', sans-serif !important;
   font-size: 0.6rem !important;
   border-top: 1px solid var(--border) !important;
   padding: 2px 6px !important;
 }
-.leaflet-control-attribution a { color: var(--accent) !important; }
+.leaflet-control-attribution a {
+  color: var(--accent) !important;
+}
+
+.settlement-label-pane {
+  pointer-events: none;
+  z-index: 510 !important;
+}
+
+.settlement-label-icon {
+  background: transparent !important;
+  border: 0 !important;
+  pointer-events: none !important;
+}
+
+.settlement-label {
+  display: inline-block;
+  transform: translate(-50%, -50%);
+  white-space: nowrap;
+  font-family: 'Inter', sans-serif;
+  font-size: 1rem;
+  font-weight: 600;
+  color: rgba(240, 246, 252, 0.72);
+  letter-spacing: 0.03em;
+  text-shadow:
+    0 0 2px rgba(0, 0, 0, 0.95),
+    0 0 10px rgba(0, 0, 0, 0.9);
+  user-select: none;
+}
+
+.settlement-label-capital {
+  color: rgba(248, 248, 248, 0.9);
+}
+
+.settlement-label-city {
+  color: rgba(222, 236, 252, 0.84);
+}
+
+.settlement-label-village {
+  color: rgba(210, 230, 210, 0.7);
+}
 
 /* ─── Popup ──────────────────────────────────────────────────────────────────── */
 .leaflet-popup-content-wrapper {
@@ -82,17 +135,21 @@ html, body {
   border: 1px solid var(--border) !important;
   border-radius: var(--radius) !important;
   color: var(--text) !important;
-  box-shadow: 0 8px 24px rgba(0,0,0,.6) !important;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6) !important;
 }
-.leaflet-popup-tip-container { display: none !important; }
+.leaflet-popup-tip-container {
+  display: none !important;
+}
 .leaflet-popup-close-button {
   color: var(--text-subtle) !important;
   font-size: 1rem !important;
   top: 6px !important;
   right: 8px !important;
-  transition: color .12s;
+  transition: color 0.12s;
 }
-.leaflet-popup-close-button:hover { color: var(--text) !important; }
+.leaflet-popup-close-button:hover {
+  color: var(--text) !important;
+}
 .leaflet-popup-content {
   font-family: 'Inter', sans-serif !important;
   font-size: 0.8rem !important;
@@ -110,7 +167,7 @@ html, body {
 .pu-type {
   font-size: 0.65rem;
   text-transform: uppercase;
-  letter-spacing: .08em;
+  letter-spacing: 0.08em;
   color: var(--text-subtle);
   margin-bottom: 6px;
 }

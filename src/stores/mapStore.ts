@@ -39,7 +39,7 @@ export const useMapStore = defineStore('map', () => {
     const next: Record<string, boolean> = {}
     for (const tid of allTypeIds) {
       next[tid] =
-        persisted && tid in persisted ? persisted[tid] : defaultOnTypeIds.includes(tid)
+        persisted && tid in persisted ? (persisted[tid] ?? false) : defaultOnTypeIds.includes(tid)
     }
     typeVis.value = next
   }

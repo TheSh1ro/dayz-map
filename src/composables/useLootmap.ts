@@ -1,26 +1,10 @@
 import { ref, watch, type Ref } from 'vue'
-import L from 'leaflet'
+import * as L from 'leaflet'
 import { useMapStore } from '@/stores/mapStore'
-import { calibState, mercYfn, finishPick } from '@/composables/useCalibration'
-import {
-  SEC_META,
-  TIER_COLOR,
-  TIER_LABEL,
-  LOOTMAP_URL,
-  DEFAULT_VISIBLE_SECTION,
-  MAP_M,
-  S,
-} from '@/config'
+import { calibState, finishPick } from '@/composables/useCalibration'
+import { SEC_META, TIER_COLOR, TIER_LABEL, DEFAULT_VISIBLE_SECTION } from '@/config'
 import type { LmSection, LmType, LootmapData } from '@/types'
-
-// ─── Coordinate conversion using live calibration constants ──────────────────
-function lm2ll(lmLat: number, lmLng: number): L.LatLng {
-  const x = lmLng * calibState.cSX + calibState.cOX
-  const z = calibState.cUseMercator
-    ? mercYfn(lmLat) * calibState.cSZ + calibState.cOZ
-    : lmLat * calibState.cSZ + calibState.cOZ
-  return L.latLng((z - MAP_M) * S, x * S)
-}
+import { izurviveToLeaflet } from '@/utils/mapCoordinates'
 
 export function useLootmap(mapRef: Ref<L.Map | null>) {
   const mapStore = useMapStore()
@@ -76,12 +60,13 @@ export function useLootmap(mapRef: Ref<L.Map | null>) {
 
           for (const pos of obj.positions) {
             if (!Array.isArray(pos) || pos.length < 2) continue
-            const nums = (pos as unknown[]).filter(
-              (v): v is number => typeof v === 'number',
-            )
+            const nums = (pos as unknown[]).filter((v): v is number => typeof v === 'number')
             if (nums.length < 2) continue
+            const lmLat = nums[0]
+            const lmLng = nums[1]
+            if (lmLat === undefined || lmLng === undefined) continue
 
-            const ll = lm2ll(nums[0], nums[1])
+            const ll = izurviveToLeaflet(lmLat, lmLng)
             if (isNaN(ll.lat) || isNaN(ll.lng)) continue
 
             const tier = nums[2] ?? -1
@@ -102,15 +87,15 @@ export function useLootmap(mapRef: Ref<L.Map | null>) {
                   `<div class="pu-type">${btype.name} <span style="color:${tc};font-weight:600">${tl}</span></div>` +
                   (cats ? `<div class="pu-cats">${cats}</div>` : ''),
               )
-              .on('click', function (e) {
+              .on('click', function (e: any) {
                 if (calibState.pickingSlot >= 0) {
                   L.DomEvent.stopPropagation(e)
-                  finishPick(nums[0], nums[1])
+                  finishPick(lmLat, lmLng)
                 }
               })
 
             cm.addTo(group)
-            allMarkers.push({ marker: cm, lmLat: nums[0], lmLng: nums[1] })
+            allMarkers.push({ marker: cm, lmLat, lmLng })
             count++
           }
         }
@@ -139,7 +124,8 @@ export function useLootmap(mapRef: Ref<L.Map | null>) {
 
     // Apply initial visibility
     for (const [tid, on] of Object.entries(mapStore.typeVis)) {
-      if (on && layerGroups[tid]) layerGroups[tid].addTo(map)
+      const group = layerGroups[tid]
+      if (on && group) group.addTo(map)
     }
 
     // React to future filter changes
@@ -147,22 +133,26 @@ export function useLootmap(mapRef: Ref<L.Map | null>) {
       () => ({ ...mapStore.typeVis }),
       (vis) => {
         for (const [tid, on] of Object.entries(vis)) {
-          if (!layerGroups[tid]) continue
-          if (on) layerGroups[tid].addTo(map)
-          else map.removeLayer(layerGroups[tid])
+          const group = layerGroups[tid]
+          if (!group) continue
+          if (on) group.addTo(map)
+          else map.removeLayer(group)
         }
       },
     )
 
     // Calibration: map click → snap to nearest visible marker
-    map.on('click', (e) => {
+    map.on('click', (e: any) => {
       if (calibState.pickingSlot < 0 || !allMarkers.length) return
       let best: (typeof allMarkers)[0] | null = null
       let bestD = Infinity
       const pt = map.latLngToLayerPoint(e.latlng)
       for (const m of allMarkers) {
         const d = pt.distanceTo(map.latLngToLayerPoint(m.marker.getLatLng()))
-        if (d < bestD) { bestD = d; best = m }
+        if (d < bestD) {
+          bestD = d
+          best = m
+        }
       }
       if (best && bestD < 120) finishPick(best.lmLat, best.lmLng)
       else
@@ -175,31 +165,39 @@ export function useLootmap(mapRef: Ref<L.Map | null>) {
   async function load() {
     status.value = { loading: true, error: null }
     try {
-      const r = await fetch(LOOTMAP_URL)
-      if (!r.ok) throw new Error('HTTP ' + r.status)
-      buildFromData((await r.json()) as LootmapData)
-    } catch (fetchErr) {
-      console.warn('[LOOTMAP] fetch bloqueado, tentando lootmap.js local…', fetchErr)
-      try {
-        await new Promise<void>((resolve, reject) => {
-          const s = document.createElement('script')
-          s.src = 'lootmap.js'
-          s.onload = () => {
-            const w = window as Window & { LOOTMAP?: LootmapData }
-            if (w.LOOTMAP) { buildFromData(w.LOOTMAP); resolve() }
-            else reject(new Error('LOOTMAP not defined'))
-          }
-          s.onerror = () => reject(new Error('Script load failed'))
-          document.body.appendChild(s)
-        })
-      } catch {
-        status.value = {
-          loading: false,
-          error:
-            'Não foi possível carregar o JSON.\n' +
-            'Abra via servidor local (ex: npx serve .) ou salve o JSON como lootmap.js com:\n' +
-            'const LOOTMAP = {...json...};',
+      const w = window as Window & { LOOTMAP?: LootmapData }
+      if (w.LOOTMAP) {
+        buildFromData(w.LOOTMAP)
+        return
+      }
+
+      await new Promise<void>((resolve, reject) => {
+        const existing = document.querySelector<HTMLScriptElement>('script[data-lootmap-local="1"]')
+        if (existing) {
+          existing.addEventListener('load', () => resolve(), { once: true })
+          existing.addEventListener('error', () => reject(new Error('Script load failed')), {
+            once: true,
+          })
+          return
         }
+
+        const s = document.createElement('script')
+        s.src = '/lootmap.js'
+        s.dataset.lootmapLocal = '1'
+        s.onload = () => resolve()
+        s.onerror = () => reject(new Error('Script load failed'))
+        document.body.appendChild(s)
+      })
+
+      if (!w.LOOTMAP) throw new Error('LOOTMAP not defined')
+      buildFromData(w.LOOTMAP)
+    } catch {
+      status.value = {
+        loading: false,
+        error:
+          'Não foi possível carregar os dados locais.\n' +
+          'Verifique se public/lootmap.js existe com:\n' +
+          'var LOOTMAP = {...};',
       }
     }
   }
@@ -208,7 +206,7 @@ export function useLootmap(mapRef: Ref<L.Map | null>) {
   /** Called by CalibrationPanel after applyCalib updates calibState constants. */
   function repositionAllMarkers() {
     for (const { marker, lmLat, lmLng } of allMarkers) {
-      marker.setLatLng(lm2ll(lmLat, lmLng))
+      marker.setLatLng(izurviveToLeaflet(lmLat, lmLng))
     }
   }
 

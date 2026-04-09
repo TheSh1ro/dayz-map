@@ -42,3 +42,26 @@ export interface LootmapData {
 }
 
 export type TileType = 'topographic' | 'satellite'
+
+export type MapLocationType =
+  | 'Camp'
+  | 'Capital'
+  | 'City'
+  | 'Hill'
+  | 'Local'
+  | 'Marine'
+  | 'RailroadStation'
+  | 'Ruin'
+  | 'Village'
+
+export type SettlementType = 'Capital' | 'City' | 'Village'
+
+export interface MapLocation {
+  name: string
+  lat: number
+  lng: number
+  type: MapLocationType
+  minZoom: number
+}
+
+export type SettlementLocation = MapLocation & { type: SettlementType }

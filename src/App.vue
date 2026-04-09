@@ -6,18 +6,36 @@ import { SHOW_CALIBRATION } from '@/config'
 import AppHeader from '@/components/AppHeader.vue'
 import AppSidebar from '@/components/AppSidebar.vue'
 import CalibrationPanel from '@/components/CalibrationPanel.vue'
+import MapLocationSearch from '@/components/MapLocationSearch.vue'
+import type { SettlementLocation } from '@/types'
 
 // ─── Map container ref ────────────────────────────────────────────────────────
 const mapEl = ref<HTMLElement | null>(null)
 
 // ─── Map composable ───────────────────────────────────────────────────────────
-const { mapInstance } = useLeafletMap(mapEl)
+const { mapInstance, settlementLocations, goToLocation, repositionLocationLabels } =
+  useLeafletMap(mapEl)
 
 // ─── Lootmap composable ───────────────────────────────────────────────────────
 const { sections, typeMap, status, load, repositionAllMarkers } = useLootmap(mapInstance)
 
 // Load as soon as the map is ready
-watch(mapInstance, (map) => { if (map) load() }, { once: true })
+watch(
+  mapInstance,
+  (map) => {
+    if (map) load()
+  },
+  { once: true },
+)
+
+function handleSelectLocation(location: SettlementLocation) {
+  goToLocation(location, 5)
+}
+
+function handleReposition() {
+  repositionAllMarkers()
+  repositionLocationLabels()
+}
 </script>
 
 <template>
@@ -26,12 +44,15 @@ watch(mapInstance, (map) => { if (map) load() }, { once: true })
   <div class="workspace">
     <AppSidebar :sections="sections" :type-map="typeMap" :status="status">
       <template v-if="SHOW_CALIBRATION" #calibration>
-        <CalibrationPanel @reposition="repositionAllMarkers" />
+        <CalibrationPanel @reposition="handleReposition" />
       </template>
     </AppSidebar>
 
-    <!-- Leaflet mounts here -->
-    <div ref="mapEl" class="map-container" />
+    <div class="map-shell">
+      <MapLocationSearch :locations="settlementLocations" @select="handleSelectLocation" />
+      <!-- Leaflet mounts here -->
+      <div ref="mapEl" class="map-container" />
+    </div>
   </div>
 
   <footer class="app-footer">
@@ -53,8 +74,19 @@ watch(mapInstance, (map) => { if (map) load() }, { once: true })
 
 .map-container {
   flex: 1;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
   background: #060c06;
   cursor: crosshair;
+}
+
+.map-shell {
+  position: relative;
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
 }
 
 .app-footer {
@@ -73,7 +105,9 @@ watch(mapInstance, (map) => { if (map) load() }, { once: true })
   color: var(--text-muted);
   font-weight: 500;
 }
-.footer-sep { color: var(--border-hi); }
+.footer-sep {
+  color: var(--border-hi);
+}
 .footer-right {
   margin-left: auto;
   font-size: 0.65rem;

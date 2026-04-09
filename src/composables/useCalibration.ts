@@ -48,26 +48,26 @@ export function applyCalib(
   useMercator: boolean,
   onComplete: () => void,
 ) {
-  if (!calibState.slots[0] || !calibState.slots[1]) {
+  const slot0 = calibState.slots[0]
+  const slot1 = calibState.slots[1]
+  if (!slot0 || !slot1) {
     calibState.hint = '⚠ Complete os 2 pontos antes de calibrar.'
     return
   }
-  const pts = [
-    { ...calibState.slots[0], gX: pt0GameX, gZ: pt0GameZ },
-    { ...calibState.slots[1], gX: pt1GameX, gZ: pt1GameZ },
-  ]
+  const pt0 = { ...slot0, gX: pt0GameX, gZ: pt0GameZ }
+  const pt1 = { ...slot1, gX: pt1GameX, gZ: pt1GameZ }
   calibState.cUseMercator = useMercator
-  calibState.cSX = (pts[1].gX - pts[0].gX) / (pts[1].lmLng - pts[0].lmLng)
-  calibState.cOX = pts[0].gX - calibState.cSX * pts[0].lmLng
+  calibState.cSX = (pt1.gX - pt0.gX) / (pt1.lmLng - pt0.lmLng)
+  calibState.cOX = pt0.gX - calibState.cSX * pt0.lmLng
 
   if (useMercator) {
-    const m0 = mercYfn(pts[0].lmLat)
-    const m1 = mercYfn(pts[1].lmLat)
-    calibState.cSZ = (pts[1].gZ - pts[0].gZ) / (m1 - m0)
-    calibState.cOZ = pts[0].gZ - calibState.cSZ * m0
+    const m0 = mercYfn(pt0.lmLat)
+    const m1 = mercYfn(pt1.lmLat)
+    calibState.cSZ = (pt1.gZ - pt0.gZ) / (m1 - m0)
+    calibState.cOZ = pt0.gZ - calibState.cSZ * m0
   } else {
-    calibState.cSZ = (pts[1].gZ - pts[0].gZ) / (pts[1].lmLat - pts[0].lmLat)
-    calibState.cOZ = pts[0].gZ - calibState.cSZ * pts[0].lmLat
+    calibState.cSZ = (pt1.gZ - pt0.gZ) / (pt1.lmLat - pt0.lmLat)
+    calibState.cOZ = pt0.gZ - calibState.cSZ * pt0.lmLat
   }
 
   calibState.hint =

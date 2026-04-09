@@ -9,9 +9,6 @@ export const SHOW_CALIBRATION = false
 export const MAP_M = 15360
 export const S = 256 / MAP_M
 
-export const LOOTMAP_URL =
-  'https://www.izurvive.com/assets/chernarus/lootmap-22255de2.json'
-
 export const TILE_URLS = {
   topographic:
     'https://static.xam.nu/dayz/maps/chernarusplus/1.27/topographic/{z}/{x}/{y}.webp',

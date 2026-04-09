@@ -11,7 +11,8 @@ const emit = defineEmits<{
 }>()
 
 // Form values
-const inputs = ref([
+const slotIndexes = [0, 1] as const
+const inputs = ref<[{ gX: string; gZ: string }, { gX: string; gZ: string }]>([
   { gX: '', gZ: '' },
   { gX: '', gZ: '' },
 ])
@@ -23,9 +24,14 @@ function pick(slot: 0 | 1) {
 
 function apply() {
   const parse = (s: string) => parseFloat(s.replace(',', '.'))
-  const [a, b] = inputs.value
-  const gx0 = parse(a.gX), gz0 = parse(a.gZ)
-  const gx1 = parse(b.gX), gz1 = parse(b.gZ)
+  const a = inputs.value[0]
+  const b = inputs.value[1]
+  if (!a || !b) return
+
+  const gx0 = parse(a.gX),
+    gz0 = parse(a.gZ)
+  const gx1 = parse(b.gX),
+    gz1 = parse(b.gZ)
   if ([gx0, gz0, gx1, gz1].some(isNaN)) {
     calibState.hint = '⚠ Preencha todos os campos antes de calibrar.'
     return
@@ -41,44 +47,40 @@ function apply() {
       <span class="calib-title">Calibração de Escala</span>
     </div>
 
-    <div
-      v-for="(pt, i) in [0, 1]"
-      :key="i"
-      class="calib-pt"
-    >
+    <div v-for="slot in slotIndexes" :key="slot" class="calib-pt">
       <div class="calib-pt-top">
-        <span class="calib-pt-label">Ponto {{ i + 1 }}</span>
+        <span class="calib-pt-label">Ponto {{ slot + 1 }}</span>
         <button
           class="pick-btn"
-          :class="{ picking: calibState.pickingSlot === i }"
-          @click="pick(i as 0 | 1)"
+          :class="{ picking: calibState.pickingSlot === slot }"
+          @click="pick(slot)"
         >
-          {{ calibState.pickingSlot === i ? '● Aguardando…' : '▶ Capturar' }}
+          {{ calibState.pickingSlot === slot ? '● Aguardando…' : '▶ Capturar' }}
         </button>
       </div>
       <div class="calib-captured">
         <span class="calib-cap-label">lat:</span>
-        <span class="calib-cap-val">{{ calibState.slots[i]?.lmLat.toFixed(5) ?? '—' }}</span>
-        <span class="calib-cap-label" style="margin-left:8px">lng:</span>
-        <span class="calib-cap-val">{{ calibState.slots[i]?.lmLng.toFixed(5) ?? '—' }}</span>
+        <span class="calib-cap-val">{{ calibState.slots[slot]?.lmLat.toFixed(5) ?? '—' }}</span>
+        <span class="calib-cap-label" style="margin-left: 8px">lng:</span>
+        <span class="calib-cap-val">{{ calibState.slots[slot]?.lmLng.toFixed(5) ?? '—' }}</span>
       </div>
       <div class="calib-inputs">
         <div class="calib-field">
           <label>X</label>
           <input
-            v-model="inputs[i].gX"
+            v-model="inputs[slot].gX"
             class="calib-inp"
             type="text"
-            :placeholder="i === 0 ? 'ex: 6500' : 'ex: 13000'"
+            :placeholder="slot === 0 ? 'ex: 6500' : 'ex: 13000'"
           />
         </div>
         <div class="calib-field">
           <label>Z</label>
           <input
-            v-model="inputs[i].gZ"
+            v-model="inputs[slot].gZ"
             class="calib-inp"
             type="text"
-            :placeholder="i === 0 ? 'ex: 2500' : 'ex: 11000'"
+            :placeholder="slot === 0 ? 'ex: 2500' : 'ex: 11000'"
           />
         </div>
       </div>
@@ -153,7 +155,9 @@ function apply() {
   background: transparent;
   color: var(--text-muted);
   cursor: pointer;
-  transition: border-color 0.12s, color 0.12s;
+  transition:
+    border-color 0.12s,
+    color 0.12s;
 }
 .pick-btn:hover {
   border-color: var(--warning);
@@ -165,8 +169,13 @@ function apply() {
   animation: blink 1s ease-in-out infinite;
 }
 @keyframes blink {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.4; }
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.4;
+  }
 }
 
 .calib-captured {
