@@ -2,7 +2,7 @@ import { ref, watch, type Ref } from 'vue'
 import * as L from 'leaflet'
 import { useMapStore } from '@/stores/mapStore'
 import { calibState, finishPick } from '@/composables/useCalibration'
-import { SEC_META, TIER_COLOR, TIER_LABEL, DEFAULT_VISIBLE_SECTION } from '@/config'
+import { SEC_META, DEFAULT_VISIBLE_SECTION } from '@/config'
 import type { LmSection, LmType, LootmapData } from '@/types'
 import { izurviveToLeaflet } from '@/utils/mapCoordinates'
 
@@ -19,7 +19,32 @@ export function useLootmap(mapRef: Ref<L.Map | null>) {
   // Leaflet LayerGroups live outside Pinia (non-serialisable)
   const layerGroups: Record<string, L.LayerGroup> = {}
   // All markers kept for calibration repositioning
-  const allMarkers: Array<{ marker: L.CircleMarker; lmLat: number; lmLng: number }> = []
+  const allMarkers: Array<{
+    marker: L.CircleMarker
+    lmLat: number
+    lmLng: number
+    baseRadius: number
+  }> = []
+
+  function radiusZoomFactor(zoom: number) {
+    // Small points on overview, progressively larger when zooming in.
+    if (zoom <= 2) return 0.55
+    if (zoom >= 7) return 1.2
+    return 0.55 + ((zoom - 2) / 5) * 0.65
+  }
+
+  function scaledRadius(baseRadius: number, zoom: number) {
+    return Math.max(1, Math.round(baseRadius * radiusZoomFactor(zoom)))
+  }
+
+  function applyMarkerSizesByZoom(map: L.Map) {
+    const zoom = map.getZoom()
+    for (const m of allMarkers) {
+      const r = scaledRadius(m.baseRadius, zoom)
+      m.marker.setRadius(r)
+      m.marker.setStyle({ weight: r <= 2 ? 1 : 1.25 })
+    }
+  }
 
   // ─── Build from data ─────────────────────────────────────────────────────────
   function buildFromData(data: LootmapData) {
@@ -70,21 +95,22 @@ export function useLootmap(mapRef: Ref<L.Map | null>) {
             if (isNaN(ll.lat) || isNaN(ll.lng)) continue
 
             const tier = nums[2] ?? -1
-            const tc = TIER_COLOR[String(tier)] ?? TIER_COLOR['-1']
-            const tl = TIER_LABEL[String(tier)] ?? TIER_LABEL['-1']
             const rad = tier >= 4 ? 5 : tier >= 3 ? 4 : 3
+            const markerColor = smeta.color
+
+            const initialRadius = scaledRadius(rad, map.getZoom())
 
             const cm = L.circleMarker(ll, {
               renderer,
-              radius: rad,
-              color: tc,
-              fillColor: tc,
+              radius: initialRadius,
+              color: markerColor,
+              fillColor: markerColor,
               fillOpacity: 0.75,
-              weight: 1.5,
+              weight: initialRadius <= 2 ? 1 : 1.25,
             })
               .bindPopup(
                 `<div class="pu-name">${displayName}</div>` +
-                  `<div class="pu-type">${btype.name} <span style="color:${tc};font-weight:600">${tl}</span></div>` +
+                  `<div class="pu-type">${btype.name} <span style="color:${markerColor};font-weight:600">${section.name}</span></div>` +
                   (cats ? `<div class="pu-cats">${cats}</div>` : ''),
               )
               .on('click', function (e: any) {
@@ -95,7 +121,7 @@ export function useLootmap(mapRef: Ref<L.Map | null>) {
               })
 
             cm.addTo(group)
-            allMarkers.push({ marker: cm, lmLat, lmLng })
+            allMarkers.push({ marker: cm, lmLat, lmLng, baseRadius: rad })
             count++
           }
         }
@@ -159,6 +185,7 @@ export function useLootmap(mapRef: Ref<L.Map | null>) {
         calibState.hint =
           '⚠ Nenhum marcador próximo. Ative uma categoria e clique em cima de uma bolinha.'
     })
+    map.on('zoomend', () => applyMarkerSizesByZoom(map))
   }
 
   // ─── Load ─────────────────────────────────────────────────────────────────────
