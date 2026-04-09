@@ -2,12 +2,12 @@ import { ref, watch, onMounted, onUnmounted, type Ref } from 'vue'
 import * as L from 'leaflet'
 import { useMapStore } from '@/stores/mapStore'
 import { MAP_M, S, TILE_URLS } from '@/config'
-import { SETTLEMENT_LOCATIONS } from '@/data/mapLocations'
+import { MAP_LOCATIONS } from '@/data/mapLocations'
 import { mapLocationToLeaflet } from '@/utils/mapCoordinates'
-import type { MapLocation, SettlementLocation, TileType } from '@/types'
+import type { MapLocation, TileType } from '@/types'
 
 type LocationLabel = {
-  location: SettlementLocation
+  location: MapLocation
   marker: L.Marker
   isVisible: boolean
 }
@@ -26,7 +26,7 @@ function escapeHtml(raw: string): string {
 export function useLeafletMap(containerRef: Ref<HTMLElement | null>) {
   const mapStore = useMapStore()
   const mapInstance = ref<L.Map | null>(null)
-  const settlementLocations = SETTLEMENT_LOCATIONS
+  const mapLocations = MAP_LOCATIONS
 
   const locationLabels: LocationLabel[] = []
   let locationLabelLayer: L.LayerGroup | null = null
@@ -74,7 +74,7 @@ export function useLeafletMap(containerRef: Ref<HTMLElement | null>) {
     locationLabelLayer = L.layerGroup().addTo(map)
     locationLabels.length = 0
 
-    for (const location of settlementLocations) {
+    for (const location of mapLocations) {
       const marker = L.marker(mapLocationToLeaflet(location), {
         pane: LABEL_PANE_NAME,
         icon: L.divIcon({
@@ -190,7 +190,7 @@ export function useLeafletMap(containerRef: Ref<HTMLElement | null>) {
     g2l,
     l2g,
     setTile,
-    settlementLocations,
+    mapLocations,
     goToLocation,
     repositionLocationLabels,
   }

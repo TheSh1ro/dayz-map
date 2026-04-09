@@ -7,13 +7,13 @@ import AppHeader from '@/components/AppHeader.vue'
 import AppSidebar from '@/components/AppSidebar.vue'
 import CalibrationPanel from '@/components/CalibrationPanel.vue'
 import MapLocationSearch from '@/components/MapLocationSearch.vue'
-import type { SettlementLocation } from '@/types'
+import type { MapLocation } from '@/types'
 
 // ─── Map container ref ────────────────────────────────────────────────────────
 const mapEl = ref<HTMLElement | null>(null)
 
 // ─── Map composable ───────────────────────────────────────────────────────────
-const { mapInstance, settlementLocations, goToLocation, repositionLocationLabels } =
+const { mapInstance, mapLocations, goToLocation, repositionLocationLabels } =
   useLeafletMap(mapEl)
 
 // ─── Lootmap composable ───────────────────────────────────────────────────────
@@ -28,7 +28,7 @@ watch(
   { once: true },
 )
 
-function handleSelectLocation(location: SettlementLocation) {
+function handleSelectLocation(location: MapLocation) {
   goToLocation(location, 5)
 }
 
@@ -49,7 +49,7 @@ function handleReposition() {
     </AppSidebar>
 
     <div class="map-shell">
-      <MapLocationSearch :locations="settlementLocations" @select="handleSelectLocation" />
+      <MapLocationSearch :locations="mapLocations" @select="handleSelectLocation" />
       <!-- Leaflet mounts here -->
       <div ref="mapEl" class="map-container" />
     </div>

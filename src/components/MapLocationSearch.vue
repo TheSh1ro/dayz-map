@@ -1,14 +1,14 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from 'vue'
-import { filterSettlementLocationsByQuery } from '@/data/mapLocations'
-import type { SettlementLocation } from '@/types'
+import { filterMapLocationsByQuery } from '@/data/mapLocations'
+import type { MapLocation } from '@/types'
 
 const props = defineProps<{
-  locations: readonly SettlementLocation[]
+  locations: readonly MapLocation[]
 }>()
 
 const emit = defineEmits<{
-  (e: 'select', location: SettlementLocation): void
+  (e: 'select', location: MapLocation): void
 }>()
 
 const rootRef = ref<HTMLElement | null>(null)
@@ -17,7 +17,7 @@ const query = ref('')
 const isOpen = ref(false)
 
 const suggestions = computed(() => {
-  const filtered = filterSettlementLocationsByQuery(query.value, props.locations)
+  const filtered = filterMapLocationsByQuery(query.value, props.locations)
   const needle = query.value.trim().toLocaleLowerCase()
 
   if (needle) {
@@ -37,7 +37,7 @@ function openListIfAny() {
   isOpen.value = hasQuery && suggestions.value.length > 0
 }
 
-function selectLocation(location: SettlementLocation) {
+function selectLocation(location: MapLocation) {
   query.value = location.name
   isOpen.value = false
   emit('select', location)
@@ -96,7 +96,7 @@ onUnmounted(() => {
       v-model="query"
       class="search-input"
       type="text"
-      placeholder="Buscar assentamento (capital, cidade, vila)..."
+      placeholder="Buscar localidade..."
       autocomplete="off"
       @focus="onFocus"
       @input="onInput"

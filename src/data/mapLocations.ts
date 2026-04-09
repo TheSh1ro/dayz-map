@@ -1,4 +1,4 @@
-import type { MapLocation, SettlementLocation, SettlementType } from '@/types'
+import type { MapLocation, SettlementType } from '@/types'
 
 export const SETTLEMENT_TYPES = ['Capital', 'City', 'Village'] as const
 
@@ -998,14 +998,14 @@ export const MAP_LOCATIONS: MapLocation[] = [
   { name: 'Zvir', lat: -51.17904222423057, lng: -166.88992315712767, type: 'Village', minZoom: 3 },
 ]
 
-export const SETTLEMENT_LOCATIONS: SettlementLocation[] = MAP_LOCATIONS.filter(
-  (location): location is SettlementLocation => isSettlementType(location.type),
+export const SETTLEMENT_LOCATIONS: MapLocation[] = MAP_LOCATIONS.filter((location) =>
+  isSettlementType(location.type),
 )
 
-export function filterSettlementLocationsByQuery(
+export function filterMapLocationsByQuery(
   query: string,
-  locations: readonly SettlementLocation[] = SETTLEMENT_LOCATIONS,
-): SettlementLocation[] {
+  locations: readonly MapLocation[] = MAP_LOCATIONS,
+): MapLocation[] {
   const normalizedQuery = normalizeLocationName(query.trim())
   if (!normalizedQuery) return [...locations]
 
