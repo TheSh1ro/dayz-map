@@ -1,12 +1,17 @@
 <script setup lang="ts">
-import { ref, watch } from 'vue'
+import { ref, watch, onMounted, onUnmounted, nextTick } from 'vue'
+import { storeToRefs } from 'pinia'
 import { useLeafletMap } from '@/composables/useLeafletMap'
 import { useLootmap } from '@/composables/useLootmap'
+import { useClanBasesLayer } from '@/composables/useClanBasesLayer'
 import { SHOW_CALIBRATION } from '@/config'
+import { useClanBaseStore } from '@/stores/clanBaseStore'
+import { useMapStore } from '@/stores/mapStore'
 import AppHeader from '@/components/AppHeader.vue'
 import AppSidebar from '@/components/AppSidebar.vue'
 import CalibrationPanel from '@/components/CalibrationPanel.vue'
 import MapLocationSearch from '@/components/MapLocationSearch.vue'
+import ClanBaseDrawer from '@/components/ClanBaseDrawer.vue'
 import type { MapLocation } from '@/types'
 
 // ─── Map container ref ────────────────────────────────────────────────────────
@@ -19,6 +24,22 @@ const { mapInstance, mapLocations, goToLocation, repositionLocationLabels } =
 // ─── Lootmap composable ───────────────────────────────────────────────────────
 const { sections, typeMap, status, load, repositionAllMarkers } = useLootmap(mapInstance)
 
+// ─── Clan bases store + layer ─────────────────────────────────────────────────
+const clanBaseStore = useClanBaseStore()
+const mapStore = useMapStore()
+const { bases, selectedBaseId, createDraft, isDrawerOpen } = storeToRefs(clanBaseStore)
+const { isEditMode } = storeToRefs(mapStore)
+
+useClanBasesLayer({
+  mapRef: mapInstance,
+  basesRef: bases,
+  selectedBaseIdRef: selectedBaseId,
+  editableRef: isEditMode,
+  createDraftRef: createDraft,
+  onSelectBase: (baseId) => clanBaseStore.selectBase(baseId),
+  onMapCreateClick: (x, z) => clanBaseStore.startCreateFromMapClick(x, z),
+})
+
 // Load as soon as the map is ready
 watch(
   mapInstance,
@@ -28,6 +49,10 @@ watch(
   { once: true },
 )
 
+watch(isDrawerOpen, () => {
+  scheduleViewportRefresh()
+})
+
 function handleSelectLocation(location: MapLocation) {
   goToLocation(location, 5)
 }
@@ -36,6 +61,56 @@ function handleReposition() {
   repositionAllMarkers()
   repositionLocationLabels()
 }
+
+function scheduleViewportRefresh() {
+  nextTick(() => {
+    requestAnimationFrame(() => {
+      mapInstance.value?.invalidateSize({ pan: false, debounceMoveend: true })
+      handleReposition()
+      window.setTimeout(() => {
+        mapInstance.value?.invalidateSize({ pan: false, debounceMoveend: true })
+        handleReposition()
+      }, 60)
+    })
+  })
+}
+
+function handleCloseDrawer() {
+  clanBaseStore.closeDrawer()
+}
+
+function handlePoiDefineBaseClick(event: Event) {
+  const target = event.target as HTMLElement | null
+  const button = target?.closest<HTMLButtonElement>('.pu-base-btn')
+  if (!button) return
+
+  event.preventDefault()
+  event.stopPropagation()
+
+  const poiId = decodeURIComponent(button.dataset.poiId ?? '')
+  const poiName = decodeURIComponent(button.dataset.poiName ?? 'POI')
+  const x = Number(button.dataset.poiX)
+  const z = Number(button.dataset.poiZ)
+  const structureImageSrc = decodeURIComponent(button.dataset.structureSrc ?? '')
+
+  if (!Number.isFinite(x) || !Number.isFinite(z) || !poiId) return
+
+  clanBaseStore.startCreateFromPoi({
+    poiId,
+    poiName,
+    x,
+    z,
+    structureImageSrc: structureImageSrc || undefined,
+  })
+}
+
+onMounted(() => {
+  document.addEventListener('click', handlePoiDefineBaseClick)
+})
+
+onUnmounted(() => {
+  document.removeEventListener('click', handlePoiDefineBaseClick)
+})
 </script>
 
 <template>
@@ -48,10 +123,13 @@ function handleReposition() {
       </template>
     </AppSidebar>
 
-    <div class="map-shell">
-      <MapLocationSearch :locations="mapLocations" @select="handleSelectLocation" />
-      <!-- Leaflet mounts here -->
-      <div ref="mapEl" class="map-container" />
+    <div class="workspace-main">
+      <div class="map-shell">
+        <MapLocationSearch :locations="mapLocations" @select="handleSelectLocation" />
+        <!-- Leaflet mounts here -->
+        <div ref="mapEl" class="map-container" />
+      </div>
+      <ClanBaseDrawer :open="isDrawerOpen" @close="handleCloseDrawer" />
     </div>
   </div>
 
@@ -83,6 +161,13 @@ function handleReposition() {
 
 .map-shell {
   position: relative;
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+}
+
+.workspace-main {
   display: flex;
   flex: 1;
   min-width: 0;

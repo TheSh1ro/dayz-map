@@ -65,3 +65,5 @@ export interface MapLocation {
 }
 
 export type SettlementLocation = MapLocation & { type: SettlementType }
+
+export * from '@/types/clanBase'

@@ -1,10 +1,18 @@
 <script setup lang="ts">
 import { useMapStore } from '@/stores/mapStore'
+import { useClanBaseStore } from '@/stores/clanBaseStore'
 
 const mapStore = useMapStore()
+const clanBaseStore = useClanBaseStore()
 
 function setTile(name: 'topographic' | 'satellite') {
   mapStore.currentTile = name
+}
+
+function handleMemberChange(event: Event) {
+  const select = event.target as HTMLSelectElement | null
+  if (!select) return
+  clanBaseStore.selectMember(select.value)
 }
 </script>
 
@@ -35,6 +43,20 @@ function setTile(name: 'topographic' | 'satellite') {
       >
         Satélite
       </button>
+    </div>
+
+    <div class="member-select-wrap">
+      <label for="member-select">Membro</label>
+      <select
+        id="member-select"
+        class="member-select"
+        :value="clanBaseStore.currentMemberId"
+        @change="handleMemberChange"
+      >
+        <option v-for="member in clanBaseStore.members" :key="member.id" :value="member.id">
+          {{ member.name }}{{ member.tag ? ` [${member.tag}]` : '' }}
+        </option>
+      </select>
     </div>
 
     <div class="header-stats">
@@ -149,6 +171,24 @@ function setTile(name: 'topographic' | 'satellite') {
   display: flex;
   align-items: center;
   gap: 20px;
+}
+
+.member-select-wrap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.member-select-wrap label {
+  font-size: 0.7rem;
+  color: var(--text-subtle);
+}
+.member-select {
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+  border-radius: var(--radius-sm);
+  padding: 4px 8px;
+  font-size: 0.74rem;
 }
 .stat {
   display: flex;

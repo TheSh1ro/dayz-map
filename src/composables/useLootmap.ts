@@ -1,10 +1,11 @@
 import { ref, watch, type Ref } from 'vue'
 import * as L from 'leaflet'
 import { useMapStore } from '@/stores/mapStore'
+import { useClanBaseStore } from '@/stores/clanBaseStore'
 import { calibState, finishPick } from '@/composables/useCalibration'
 import { SEC_META, DEFAULT_VISIBLE_SECTION } from '@/config'
 import type { LmSection, LmType, LootmapData } from '@/types'
-import { izurviveToLeaflet } from '@/utils/mapCoordinates'
+import { izurviveToGame, izurviveToLeaflet } from '@/utils/mapCoordinates'
 
 const PREVIEW_IMAGES = import.meta.glob('@/assets/images/*.webp', {
   eager: true,
@@ -32,6 +33,7 @@ function escapeHtml(text: string) {
 
 export function useLootmap(mapRef: Ref<L.Map | null>) {
   const mapStore = useMapStore()
+  const clanBaseStore = useClanBaseStore()
 
   const sections = ref<LmSection[]>([])
   const typeMap = ref<Record<string, LmType>>({})
@@ -48,7 +50,16 @@ export function useLootmap(mapRef: Ref<L.Map | null>) {
     lmLat: number
     lmLng: number
     baseRadius: number
+    tid: string
+    poiId: string | null
   }> = []
+  const markersByType: Record<
+    string,
+    Array<{
+      marker: L.CircleMarker
+      poiId: string | null
+    }>
+  > = {}
 
   function radiusZoomFactor(zoom: number) {
     // Small points on overview, progressively larger when zooming in.
@@ -67,6 +78,42 @@ export function useLootmap(mapRef: Ref<L.Map | null>) {
       const r = scaledRadius(m.baseRadius, zoom)
       m.marker.setRadius(r)
       m.marker.setStyle({ weight: r <= 2 ? 1 : 1.25 })
+    }
+  }
+
+  function usedPoiIds() {
+    return new Set(
+      clanBaseStore.bases
+        .filter((base) => base.sourceType === 'poi' && Boolean(base.sourcePoiId))
+        .map((base) => base.sourcePoiId as string),
+    )
+  }
+
+  function syncMarkerVisibility() {
+    const map = mapRef.value
+    if (!map) return
+
+    const editMode = mapStore.isEditMode
+    const blockedPoiIds = usedPoiIds()
+
+    for (const [tid, group] of Object.entries(layerGroups)) {
+      group.clearLayers()
+
+      if (!editMode) {
+        map.removeLayer(group)
+        continue
+      }
+
+      for (const entry of markersByType[tid] ?? []) {
+        const visibleByFilter = Boolean(mapStore.typeVis[tid])
+        const availableForBase = !entry.poiId || !blockedPoiIds.has(entry.poiId)
+        if (visibleByFilter && availableForBase) {
+          group.addLayer(entry.marker)
+        }
+      }
+
+      if (group.getLayers().length > 0) group.addTo(map)
+      else map.removeLayer(group)
     }
   }
 
@@ -100,6 +147,7 @@ export function useLootmap(mapRef: Ref<L.Map | null>) {
       for (const btype of section.types ?? []) {
         const tid = sid + '_' + btype.name.replace(/\W/g, '_')
         const group = L.layerGroup()
+        markersByType[tid] = []
         let count = 0
 
         for (const obj of btype.objects ?? []) {
@@ -131,6 +179,10 @@ export function useLootmap(mapRef: Ref<L.Map | null>) {
             const previewHtml = previewSrc
               ? `<div class="pu-preview-wrap"><img class="pu-preview" src="${previewSrc}" alt="Preview ${displayNameSafe}" loading="lazy" /></div>`
               : ''
+            const poiId = encodeURIComponent(`${tid}:${obj.name}:${count}`)
+            const poiName = encodeURIComponent(displayName)
+            const structureSrc = encodeURIComponent(previewSrc ?? '')
+            const gameCoords = izurviveToGame(lmLat, lmLng)
 
             const cm = L.circleMarker(ll, {
               renderer,
@@ -144,17 +196,19 @@ export function useLootmap(mapRef: Ref<L.Map | null>) {
                 `<div class="pu-name">${displayNameSafe}</div>` +
                   `<div class="pu-type">${btypeNameSafe} <span style="color:${markerColor};font-weight:600">${sectionNameSafe}</span></div>` +
                   previewHtml +
-                  (cats ? `<div class="pu-cats">${catsSafe}</div>` : ''),
+                  (cats ? `<div class="pu-cats">${catsSafe}</div>` : '') +
+                  `<button type="button" class="pu-base-btn" data-poi-id="${poiId}" data-poi-name="${poiName}" data-poi-x="${Math.round(gameCoords.x)}" data-poi-z="${Math.round(gameCoords.z)}" data-structure-src="${structureSrc}">Definir como base</button>`,
               )
               .on('click', function (e: L.LeafletMouseEvent) {
+                if (e.originalEvent) L.DomEvent.stopPropagation(e.originalEvent)
                 if (calibState.pickingSlot >= 0) {
                   L.DomEvent.stopPropagation(e)
                   finishPick(lmLat, lmLng)
                 }
               })
 
-            cm.addTo(group)
-            allMarkers.push({ marker: cm, lmLat, lmLng, baseRadius: rad })
+            markersByType[tid].push({ marker: cm, poiId })
+            allMarkers.push({ marker: cm, lmLat, lmLng, baseRadius: rad, tid, poiId })
             count++
           }
         }
@@ -180,33 +234,27 @@ export function useLootmap(mapRef: Ref<L.Map | null>) {
 
     // Init filter state (restores localStorage or applies defaults)
     mapStore.initFilters(allTypeIds, defaultOnTypeIds)
-
-    // Apply initial visibility
-    for (const [tid, on] of Object.entries(mapStore.typeVis)) {
-      const group = layerGroups[tid]
-      if (on && group) group.addTo(map)
-    }
+    syncMarkerVisibility()
 
     // React to future filter changes
     watch(
       () => ({ ...mapStore.typeVis }),
-      (vis) => {
-        for (const [tid, on] of Object.entries(vis)) {
-          const group = layerGroups[tid]
-          if (!group) continue
-          if (on) group.addTo(map)
-          else map.removeLayer(group)
-        }
-      },
+      () => syncMarkerVisibility(),
     )
+    watch(() => mapStore.viewMode, () => syncMarkerVisibility())
+    watch(() => clanBaseStore.bases, () => syncMarkerVisibility(), { deep: true })
 
     // Calibration: map click → snap to nearest visible marker
     map.on('click', (e: L.LeafletMouseEvent) => {
-      if (calibState.pickingSlot < 0 || !allMarkers.length) return
+      if (calibState.pickingSlot < 0 || !allMarkers.length || !mapStore.isEditMode) return
+      const blockedPoiIds = usedPoiIds()
       let best: (typeof allMarkers)[0] | null = null
       let bestD = Infinity
       const pt = map.latLngToLayerPoint(e.latlng)
       for (const m of allMarkers) {
+        const visibleByFilter = Boolean(mapStore.typeVis[m.tid])
+        const availableForBase = !m.poiId || !blockedPoiIds.has(m.poiId)
+        if (!visibleByFilter || !availableForBase) continue
         const d = pt.distanceTo(map.latLngToLayerPoint(m.marker.getLatLng()))
         if (d < bestD) {
           bestD = d

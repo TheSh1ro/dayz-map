@@ -13,10 +13,21 @@ const props = defineProps<{
 const mapStore = useMapStore()
 
 const allTypeIds = computed(() => props.sections.flatMap((s) => s.typeIds))
-const allOn = computed(() => mapStore.allVisible(allTypeIds.value))
+const allOn = computed(() => mapStore.isEditMode && mapStore.allVisible(allTypeIds.value))
+const isEditMode = computed(() => mapStore.viewMode === 'edit')
 
 function toggleAll() {
-  mapStore.toggleAll(allTypeIds.value, !allOn.value)
+  const next = !allOn.value
+  mapStore.toggleAll(allTypeIds.value, next)
+}
+
+function activateEditMode() {
+  mapStore.setViewMode('edit')
+  mapStore.toggleAll(allTypeIds.value, true)
+}
+
+function activateClanBasesMode() {
+  mapStore.setViewMode('clan-bases')
 }
 </script>
 
@@ -37,20 +48,40 @@ function toggleAll() {
     </div>
 
     <!-- Filter header -->
-    <div class="filter-header">
-      <span class="filter-title">Filtros</span>
+    <div class="filter-header mode-header">
+      <span class="filter-title">Visualização</span>
+    </div>
+
+    <div class="mode-switch">
       <button
-        v-if="sections.length > 0"
-        class="toggle-all-btn"
-        :class="{ on: allOn }"
-        @click="toggleAll"
+        type="button"
+        class="mode-btn"
+        :class="{ on: isEditMode }"
+        :aria-pressed="isEditMode"
+        @click="activateEditMode"
       >
-        {{ allOn ? 'Ocultar tudo' : 'Mostrar tudo' }}
+        <span class="mode-btn-title">Modo edição</span>
+        <span class="mode-btn-copy">Mostra markers livres e libera os filtros.</span>
+      </button>
+      <button
+        type="button"
+        class="mode-btn"
+        :class="{ on: !isEditMode }"
+        :aria-pressed="!isEditMode"
+        @click="activateClanBasesMode"
+      >
+        <span class="mode-btn-title">Bases do clã</span>
+        <span class="mode-btn-copy">Mostra apenas as bases já cadastradas.</span>
       </button>
     </div>
 
     <!-- Status / sections -->
     <div class="filter-scroll">
+      <div v-if="!isEditMode" class="mode-state-card">
+        <span class="mode-state-kicker">Bases do clã</span>
+        <p>O mapa está focado nas bases existentes. Ative o modo edição para revisar POIs e filtros.</p>
+      </div>
+
       <div v-if="status.loading" class="status-msg">
         <span class="spinner" />
         Carregando lootmap…
@@ -58,7 +89,18 @@ function toggleAll() {
       <div v-else-if="status.error" class="status-msg error">
         <pre>{{ status.error }}</pre>
       </div>
-      <template v-else>
+      <template v-else-if="isEditMode">
+        <div class="filter-header filter-subheader">
+          <span class="filter-title">Filtros</span>
+          <button
+            v-if="sections.length > 0"
+            class="toggle-all-btn"
+            :class="{ on: allOn }"
+            @click="toggleAll"
+          >
+            {{ allOn ? 'Ocultar tudo' : 'Mostrar tudo' }}
+          </button>
+        </div>
         <FilterSection
           v-for="sec in sections"
           :key="sec.id"
@@ -134,6 +176,13 @@ function toggleAll() {
   text-transform: uppercase;
   letter-spacing: 0.08em;
 }
+.mode-header {
+  border-bottom: 0;
+  padding-bottom: 6px;
+}
+.filter-subheader {
+  padding-top: 12px;
+}
 .toggle-all-btn {
   font-size: 0.7rem;
   font-family: 'Inter', sans-serif;
@@ -161,6 +210,67 @@ function toggleAll() {
   flex: 1;
   overflow-y: auto;
   overflow-x: hidden;
+}
+
+.mode-switch {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  padding: 0 12px 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.mode-btn {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-height: 78px;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--bg) 32%, transparent);
+  text-align: left;
+  color: var(--text);
+  cursor: pointer;
+  transition: border-color 0.12s ease, background 0.12s ease, transform 0.12s ease;
+}
+.mode-btn:hover {
+  transform: translateY(-1px);
+  border-color: var(--border-hi);
+}
+.mode-btn.on {
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--border));
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+}
+.mode-btn-title {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--text-hi);
+}
+.mode-btn-copy {
+  font-size: 0.71rem;
+  line-height: 1.45;
+  color: var(--text-muted);
+}
+.mode-state-card {
+  margin: 12px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--surface-hi) 42%, transparent);
+}
+.mode-state-kicker {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 0.66rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-subtle);
+}
+.mode-state-card p {
+  font-size: 0.76rem;
+  line-height: 1.5;
+  color: var(--text-muted);
 }
 .filter-scroll::-webkit-scrollbar {
   width: 4px;

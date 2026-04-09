@@ -96,6 +96,11 @@ body {
   z-index: 510 !important;
 }
 
+.map-overlay-animating .leaflet-overlay-pane,
+.map-overlay-animating .settlement-label-pane {
+  opacity: 0;
+}
+
 .settlement-label-icon {
   background: transparent !important;
   border: 0 !important;
@@ -191,4 +196,23 @@ body {
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   object-fit: cover;
+}
+
+.pu-base-btn {
+  margin-top: 8px;
+  width: 100%;
+  border: 1px solid #0e7490;
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, #22d3ee 12%, transparent);
+  color: #67e8f9;
+  font-family: 'Inter', sans-serif;
+  font-size: 0.73rem;
+  font-weight: 600;
+  padding: 6px 8px;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.pu-base-btn:hover {
+  background: color-mix(in srgb, #22d3ee 22%, transparent);
 }

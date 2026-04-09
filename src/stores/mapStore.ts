@@ -1,8 +1,11 @@
 import { defineStore } from 'pinia'
-import { ref, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
 import type { TileType } from '@/types'
 
 const FILTER_STORAGE_KEY = 'dayzmap:filters_v1'
+const MAP_VIEW_MODE_STORAGE_KEY = 'dayzmap:view-mode_v1'
+
+export type MapViewMode = 'edit' | 'clan-bases'
 
 export const useMapStore = defineStore('map', () => {
   // ─── Map UI ──────────────────────────────────────────────────────────────────
@@ -10,6 +13,8 @@ export const useMapStore = defineStore('map', () => {
   const coords = ref({ x: '—', z: '—' })
   const zoom = ref(0)
   const poiCount = ref(0)
+  const viewMode = ref<MapViewMode>('clan-bases')
+  const isEditMode = computed(() => viewMode.value === 'edit')
 
   // ─── Filter Visibility ────────────────────────────────────────────────────────
   // typeId → visible. Persisted to localStorage automatically.
@@ -27,6 +32,20 @@ export const useMapStore = defineStore('map', () => {
   // Persist on every change
   watch(typeVis, (v) => localStorage.setItem(FILTER_STORAGE_KEY, JSON.stringify(v)), {
     deep: true,
+  })
+
+  function _loadViewMode() {
+    try {
+      const raw = localStorage.getItem(MAP_VIEW_MODE_STORAGE_KEY)
+      return raw === 'edit' || raw === 'clan-bases' ? raw : 'clan-bases'
+    } catch {
+      return 'clan-bases'
+    }
+  }
+
+  viewMode.value = _loadViewMode()
+  watch(viewMode, (mode) => {
+    localStorage.setItem(MAP_VIEW_MODE_STORAGE_KEY, mode)
   })
 
   /**
@@ -64,11 +83,17 @@ export const useMapStore = defineStore('map', () => {
     return allTypeIds.length > 0 && allTypeIds.every((tid) => typeVis.value[tid])
   }
 
+  function setViewMode(mode: MapViewMode) {
+    viewMode.value = mode
+  }
+
   return {
     currentTile,
     coords,
     zoom,
     poiCount,
+    viewMode,
+    isEditMode,
     typeVis,
     initFilters,
     setTypeVis,
@@ -76,5 +101,6 @@ export const useMapStore = defineStore('map', () => {
     isSecAllOn,
     toggleAll,
     allVisible,
+    setViewMode,
   }
 })
